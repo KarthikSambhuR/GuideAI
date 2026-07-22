@@ -4,6 +4,9 @@ from pywhispercpp.model import Model
 import base64
 from io import BytesIO
 import pyautogui
+from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
+from langchain_core.messages import HumanMessage
  
 
 print("Loading the whisper model...")
