@@ -45,7 +45,7 @@ def input_audio():
         while True:
             command = rec_audio()
             print("Transcribed :",command)
-            if input("Are you satisfied with the audio (y/n) : ") == 'y':
+            if input("Are you satisfied with the audio (y/n):") == 'y':
                 return command
     except Exception as e:
         print(e)
@@ -64,7 +64,7 @@ if __name__ == "__main__" :
     print("The langgraph agent is set up")
 
     while True:
-        text = input_audio()
+        text = 'What is name of hte current program that is currently selected'
         img = screenshot()
         message = HumanMessage(
             content = [
@@ -75,7 +75,7 @@ if __name__ == "__main__" :
         for event in agent.stream({"messages": [message]}):
             for key, value in event.items():
                 if key == "agent":
-                    print(f"\n🤖 GuideAI: {value['messages'][-1].content}\n")
+                    print(f"\n GuideAI: {value['messages'][-1].content}\n")
         
         if input("Try another command? (y/n): ").lower() != 'y':
             break
