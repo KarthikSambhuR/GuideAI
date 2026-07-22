@@ -5,7 +5,7 @@ import base64
 from io import BytesIO
 import pyautogui
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
  
 
@@ -31,20 +31,53 @@ def rec_audio(duration_max=10,sample_rate=16000) -> str :
     segments = stt_model.transcribe(audio_array)
     return " ".join([segment.text for segment in segments]).strip()
 
-    def screenshot():
-        image = pyautogui.screenshot()
-        print("Screenshot Secured")
-        buffer = BytesIO()
-        image.save(buffer,format="JPEG",quality=80)
-        img_b64 = base64.b64encode(buffer   .getvalue().decode('utf-8'))
-        print("B64 encoded")
-        return img_b64
+def screenshot():
+    image = pyautogui.screenshot()
+    print("Screenshot Secured")
+    buffer = BytesIO()
+    image.save(buffer,format="JPEG",quality=80)
+    img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    print("B64 encoded")
+    return img_b64  
+
+def input_audio():
+    try :
+        while True:
+            command = rec_audio()
+            print("Transcribed :",command)
+            if input("Are you satisfied with the audio (y/n) : ") == 'y':
+                return command
+    except Exception as e:
+        print(e)
+    
 
 if __name__ == "__main__" : 
-    while True:
-        text = rec_audio()
-        print(f"Transcribed : {text}")
+    print("Connecting to the VL Model")
+    vlm = ChatOpenAI(
+        model="qwen2.5vl:3b",  
+        api_key="ollama",      
+        base_url="http://localhost:11434/v1" 
+    )
+    tools = []
+    agent = create_agent(vlm,tools)
 
-        if input("\nTry again? (y/n): ").lower() != 'y':
-             print ("BYeeee")
-             break
+    print("The langgraph agent is set up")
+
+    while True:
+        text = input_audio()
+        img = screenshot()
+        message = HumanMessage(
+            content = [
+                {"type": "text", "text": f"Look at this screenshot. The user asked: {text}. Describe what you see that matches their request."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}
+            ]
+        )
+        for event in agent.stream({"messages": [message]}):
+            for key, value in event.items():
+                if key == "agent":
+                    print(f"\n🤖 GuideAI: {value['messages'][-1].content}\n")
+        
+        if input("Try another command? (y/n): ").lower() != 'y':
+            break
+            
+        
