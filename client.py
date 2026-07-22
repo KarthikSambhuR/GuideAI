@@ -34,7 +34,7 @@ def rec_audio(duration_max=10,sample_rate=16000) -> str :
 def screenshot():
     image = pyautogui.screenshot()
     print("Screenshot Secured")
-    image.thumbnail((640, 480))
+    image.thumbnail((1280, 720))
     buffer = BytesIO()
     image.save(buffer,format="JPEG",quality=50)
     img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
