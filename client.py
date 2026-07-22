@@ -34,8 +34,9 @@ def rec_audio(duration_max=10,sample_rate=16000) -> str :
 def screenshot():
     image = pyautogui.screenshot()
     print("Screenshot Secured")
+    image.thumbnail((640, 480))
     buffer = BytesIO()
-    image.save(buffer,format="JPEG",quality=80)
+    image.save(buffer,format="JPEG",quality=50)
     img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
     print("B64 encoded")
     return img_b64  
@@ -56,12 +57,13 @@ if __name__ == "__main__" :
     vlm = ChatOpenAI(
         model="qwen2.5vl:3b",  
         api_key="ollama",      
-        base_url="http://localhost:11434/v1" 
+        base_url="http://localhost:11434/v1",
+        temperature=0.0 
     )
     tools = []
     agent = create_agent(vlm,tools)
 
-    print("The langgraph agent is set up")
+    print("The lang graph agent is set up")
 
     while True:
         text = 'What is name of hte current program that is currently selected'
@@ -72,12 +74,13 @@ if __name__ == "__main__" :
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}
             ]
         )
-        for event in agent.stream({"messages": [message]}):
-            for key, value in event.items():
-                if key == "agent":
-                    print(f"\n GuideAI: {value['messages'][-1].content}\n")
-        
-        if input("Try another command? (y/n): ").lower() != 'y':
-            break
+        try:
+             result = agent.invoke({"messages": [message]})
             
+             final_text = result["messages"][-1].content
+            
+             print(f"GuideAI: {final_text}\n")
+                
+        except Exception as e:
+            print(f"\n❌ ERROR communicating with Ollama: {e}\n")
         
