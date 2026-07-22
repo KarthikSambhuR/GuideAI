@@ -55,7 +55,7 @@ def input_audio():
 if __name__ == "__main__" : 
     print("Connecting to the VL Model")
     vlm = ChatOpenAI(
-        model="qwen2.5vl:3b",  
+        model="moondream",  
         api_key="ollama",      
         base_url="http://localhost:11434/v1",
         temperature=0.0 
@@ -66,7 +66,7 @@ if __name__ == "__main__" :
     print("The lang graph agent is set up")
 
     while True:
-        text = 'What is name of hte current program that is currently selected'
+        text = 'What is name of the current program or the file where the program resides that is currently selected'
         img = screenshot()
         message = HumanMessage(
             content = [
