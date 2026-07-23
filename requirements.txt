@@ -1,0 +1,9 @@
+numpy
+sounddevice
+pywhispercpp
+pynput
+pyautogui
+langchain
+langchain-openai
+langchain-core
+mcp
