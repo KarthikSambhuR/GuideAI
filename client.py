@@ -9,6 +9,7 @@ from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage
 from server import highligter
 import pyautogui
+import re
  
 
 print("Loading the whisper model...")
@@ -62,8 +63,6 @@ if __name__ == "__main__" :
         base_url="http://127.0.0.1:1234/v1",
         temperature=0.0 
     )
-    tools = [highligter]
-    agent = vlm.bind_tools(tools,tool_choice="required")
 
     print("The lang graph agent is set up")
 
@@ -93,34 +92,40 @@ if __name__ == "__main__" :
                 }}
                 ```
                 CRITICAL INSTRUCTION:
-                You MUST use the 'highlighter' tool to output the bounding box coordinates of the requested element. Do not just describe it in text."""},
+                Reply ONLY with the structured JSON bounding box coordinates. Do not write any other text."""},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}
-            ]
-        )
+                ]
+            )
         try:
-             print("Forcing the agent to trigger the tool...")
-             
-             # 2. Invoke the bound model
-             result = agent.invoke([message])
-            
-             # 3. Check if the model successfully built the tool call payload
-             if result.tool_calls:
-                 print(f"✅ Tool call generated: {result.tool_calls}")
-                 
-                 # 4. Extract the arguments Qwen decided on
-                 tool_args = result.tool_calls[0]["args"]
-                 
-                 # 5. Physically fire the tool yourself with Qwen's arguments!
-                 highligter.invoke(tool_args)
-                 
-             else:
-                 # If we end up here, LM Studio's API ignored the tool_choice command
-                 print("⚠️ The model refused to use the tool and output text instead:")
-                 print(result.content)
+         print("🧠 Qwen is analyzing the screen...")
+         result = vlm.invoke([message])
+         final_text = result.content
+         print(f"GuideAI Output: {final_text}\n")
 
-             if input("\nAll good ? (y/n): ").strip().lower() == 'y':
-                break
-                
+         # Hunt for the JSON block in the text
+         json_match = re.search(r'\{.*\}', final_text, re.DOTALL)
+         
+         if json_match:
+             data = json.loads(json_match.group(0))
+             if "bbox_2d" in data:
+                 bbox = data["bbox_2d"]
+                 ai_x = int(bbox["left"])
+                 ai_y = int(bbox["top"])
+                 ai_w = int(bbox["width"])
+                 ai_h = int(bbox["height"])
+                 
+                 print("🎯 Coordinates found! Firing tool...")
+                 
+                 # Fire the tool manually using the parsed data
+                 highligter.invoke({"x": ai_x, "y": ai_y, "width": ai_w, "height": ai_h})
+             else:
+                 print("⚠️ JSON found, but 'bbox_2d' was missing.")
+         else:
+             print("⚠️ No JSON found in response.")
+             
+         if input("\nAll good ? (y/n): ").strip().lower() == 'y':
+            break
+             
         except Exception as e:
-            print(f"\n❌ ERROR communicating with LM Studio: {e}\n")
+            print(f"\n❌ ERROR: {e}\n")
         
