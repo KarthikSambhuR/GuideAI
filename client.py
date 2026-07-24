@@ -5,8 +5,10 @@ import base64
 from io import BytesIO
 import pyautogui
 from langchain_openai import ChatOpenAI
-from langchain.agents import create_agent
+from langgraph.prebuilt import create_react_agent
 from langchain_core.messages import HumanMessage
+from server import highligter
+import pyautogui
  
 
 print("Loading the whisper model...")
@@ -34,7 +36,7 @@ def rec_audio(duration_max=10,sample_rate=16000) -> str :
 def screenshot():
     image = pyautogui.screenshot()
     print("Screenshot Secured")
-    image.thumbnail((1280, 720))
+    image.thumbnail((1024, 576))
     buffer = BytesIO()
     image.save(buffer,format="JPEG",quality=50)
     img_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
@@ -55,32 +57,70 @@ def input_audio():
 if __name__ == "__main__" : 
     print("Connecting to the VL Model")
     vlm = ChatOpenAI(
-        model="moondream",  
-        api_key="ollama",      
-        base_url="http://localhost:11434/v1",
+        model="qwen2.5vl:3b",  
+        api_key="lm-studio",      
+        base_url="http://127.0.0.1:1234/v1",
         temperature=0.0 
     )
-    tools = []
-    agent = create_agent(vlm,tools)
+    tools = [highligter]
+    agent = vlm.bind_tools(tools,tool_choice="required")
 
     print("The lang graph agent is set up")
 
+    ai_width, ai_height = 1024, 576 
+
     while True:
-        text = 'What is name of the current program or the file where the program resides that is currently selected'
+        command = 'Where is the application exit button of the current application.'
         img = screenshot()
         message = HumanMessage(
-            content = [
-                {"type": "text", "text": f"Look at this screenshot. The user asked: {text}. Describe what you see that matches their request."},
+             content=[
+                {"type": "text", "text": f"""You are a precise computer vision UI locator.
+                The user requested to find: '{command}'.
+
+                CONTEXT:
+                - You are looking at a computer screen scaled to {ai_width}x{ai_height} pixels.
+                - The origin (0,0) is the top-left corner.
+
+                EXAMPLE OUTPUT:
+                ```json
+                {{
+                    "bbox_2d": {{
+                    "left": 150,
+                    "top": 45,
+                    "width": 200,
+                    "height": 30
+                    }}
+                }}
+                ```
+                CRITICAL INSTRUCTION:
+                You MUST use the 'highlighter' tool to output the bounding box coordinates of the requested element. Do not just describe it in text."""},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}
             ]
         )
         try:
-             result = agent.invoke({"messages": [message]})
+             print("Forcing the agent to trigger the tool...")
+             
+             # 2. Invoke the bound model
+             result = agent.invoke([message])
             
-             final_text = result["messages"][-1].content
-            
-             print(f"GuideAI: {final_text}\n")
+             # 3. Check if the model successfully built the tool call payload
+             if result.tool_calls:
+                 print(f"✅ Tool call generated: {result.tool_calls}")
+                 
+                 # 4. Extract the arguments Qwen decided on
+                 tool_args = result.tool_calls[0]["args"]
+                 
+                 # 5. Physically fire the tool yourself with Qwen's arguments!
+                 highligter.invoke(tool_args)
+                 
+             else:
+                 # If we end up here, LM Studio's API ignored the tool_choice command
+                 print("⚠️ The model refused to use the tool and output text instead:")
+                 print(result.content)
+
+             if input("\nAll good ? (y/n): ").strip().lower() == 'y':
+                break
                 
         except Exception as e:
-            print(f"\n❌ ERROR communicating with Ollama: {e}\n")
+            print(f"\n❌ ERROR communicating with LM Studio: {e}\n")
         
