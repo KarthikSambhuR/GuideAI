@@ -1,57 +1,135 @@
-"""Non-blocking, serialized requests to the local vision model."""
+"""Non-blocking Gemma 4 E2B vision requests and annotation parsing."""
 
+import json
 import queue
 import threading
+from collections.abc import Callable
+from urllib.request import Request, urlopen
 
-from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
-
-from config import OLLAMA_API_KEY, OLLAMA_BASE_URL, OLLAMA_MODEL
+from config import LLAMA_MODEL, LLAMA_REQUEST_TIMEOUT_SECONDS, LLAMA_SERVER_URL
 from screen import capture_screenshot
 
 
-class QuestionProcessor:
-    """Queue questions so network errors never block recording or F8."""
+ANNOTATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string"},
+        "annotations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["box", "arrow", "text"]},
+                    "x": {"type": "number", "minimum": 0, "maximum": 1000},
+                    "y": {"type": "number", "minimum": 0, "maximum": 1000},
+                    "width": {"type": "number", "minimum": 0, "maximum": 1000},
+                    "height": {"type": "number", "minimum": 0, "maximum": 1000},
+                    "x2": {"type": "number", "minimum": 0, "maximum": 1000},
+                    "y2": {"type": "number", "minimum": 0, "maximum": 1000},
+                    "label": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+                "required": ["type", "x", "y"],
+            },
+        },
+    },
+    "required": ["answer", "annotations"],
+}
 
-    def __init__(self) -> None:
-        self.questions: queue.Queue[str | None] = queue.Queue()
-        self.model = ChatOpenAI(
-            model=OLLAMA_MODEL,
-            api_key=OLLAMA_API_KEY,
-            base_url=OLLAMA_BASE_URL,
-            temperature=0.0,
-            timeout=30,
-            max_retries=1,
-        )
+PROMPT = """You are GuideAI, a visual guide for the current desktop screenshot.
+Answer the user's request as a short, practical tutorial and identify the next exact
+visible interface element they should click. Return only the requested JSON object.
+Coordinates are normalized to 0-1000 over the full screenshot: x grows left-to-right
+and y grows top-to-bottom. Return exactly one box around the next click target and one
+arrow pointing to it. Use a short label such as \"1. Click Settings\". Never invent a
+location that is not visibly supported by the screenshot."""
+
+
+class QuestionProcessor:
+    """Queue questions so model work never blocks microphone input."""
+
+    def __init__(self, on_response: Callable[[dict], None]) -> None:
+        self.on_response = on_response
+        self.questions: queue.Queue[tuple[str, dict | None] | None] = queue.Queue()
         self.worker = threading.Thread(target=self._run, daemon=True, name="vision-request-worker")
 
     def start(self) -> None:
         self.worker.start()
 
     def submit(self, question: str) -> None:
-        self.questions.put(question)
+        self.questions.put((question, None))
         print("GuideAI: question queued.")
+
+    def continue_tutorial(self, question: str, completed_target: dict) -> None:
+        """Capture the updated screen and ask the model for the next click."""
+        self.questions.put((question, completed_target))
+        print("GuideAI: click detected; finding the next step...")
 
     def stop(self) -> None:
         self.questions.put(None)
 
     def _run(self) -> None:
         while True:
-            question = self.questions.get()
-            if question is None:
+            task = self.questions.get()
+            if task is None:
                 return
+            question, completed_target = task
             try:
-                image = capture_screenshot()
-                message = HumanMessage(content=[
-                    {"type": "text", "text": (
-                        "Look at this screenshot. The user asked: "
-                        f"{question}. Describe what you see that matches their request."
-                    )},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image}"}},
-                ])
-                result = self.model.invoke([message])
-                print(f"GuideAI: {result.content}\n")
+                response = self._ask_model(question, completed_target)
+                print(f"GuideAI: {response['answer']}\n")
+                self.on_response(response)
             except Exception as error:
-                print(f"GuideAI connection error: {error}")
+                print(f"GuideAI request error: {error}")
             finally:
                 self.questions.task_done()
+
+    def _ask_model(self, question: str, completed_target: dict | None = None) -> dict:
+        screenshot = capture_screenshot()
+        continuation = ""
+        if completed_target:
+            continuation = (
+                "\n\nThe user clicked the previous highlighted target. Use the new "
+                "screenshot and show only the next click. Do not repeat the completed step."
+            )
+        body = {
+            "model": LLAMA_MODEL,
+            "stream": False,
+            "temperature": 0,
+            "response_format": {"type": "json_object", "schema": ANNOTATION_SCHEMA},
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": f"{PROMPT}\n\nUser request: {question}{continuation}"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{screenshot}"},
+                    },
+                ],
+            }],
+        }
+        request = Request(
+            LLAMA_SERVER_URL,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(request, timeout=LLAMA_REQUEST_TIMEOUT_SECONDS) as response:
+            payload = json.load(response)
+        result = json.loads(payload["choices"][0]["message"]["content"])
+        if not isinstance(result.get("answer"), str) or not isinstance(result.get("annotations"), list):
+            raise ValueError("Gemma returned an invalid guidance response.")
+        result["annotations"] = [
+            item for item in result["annotations"]
+            if isinstance(item, dict) and item.get("type") in {"box", "arrow", "text"}
+        ]
+        print(f"GuideAI: model returned {len(result['annotations'])} visual annotations.")
+        # Always display the model's spoken guidance as a visible tutorial caption,
+        # even if the model omits an optional text annotation of its own.
+        result["annotations"].append({
+            "type": "text",
+            "x": 24,
+            "y": 40,
+            "text": result["answer"],
+        })
+        result["question"] = question
+        return result

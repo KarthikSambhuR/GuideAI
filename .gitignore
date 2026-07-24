@@ -16,3 +16,6 @@ openvino_env/
 .env
 .vscode/
 .idea/
+
+# Large local model weights
+*.gguf
