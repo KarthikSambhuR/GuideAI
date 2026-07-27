@@ -7,6 +7,7 @@ from urllib.request import urlopen
 
 from config import (
     GGUF_MODEL_PATH,
+    LLAMA_HF_REPO,
     LLAMA_SERVER_MODELS_URL,
     LLAMA_SERVER_PATH,
     LLAMA_START_TIMEOUT_SECONDS,
@@ -21,12 +22,13 @@ class LlamaManager:
         self.process: subprocess.Popen[bytes] | None = None
 
     def ensure_ready(self) -> None:
-        if not GGUF_MODEL_PATH.is_file():
-            raise RuntimeError(f"The Gemma GGUF was not found: {GGUF_MODEL_PATH}")
-        if not MMPROJ_MODEL_PATH.is_file():
-            raise RuntimeError(f"The vision projector was not found: {MMPROJ_MODEL_PATH}")
         if not LLAMA_SERVER_PATH.is_file():
             raise RuntimeError(f"llama-server.exe was not found: {LLAMA_SERVER_PATH}")
+        if not LLAMA_HF_REPO:
+            if not GGUF_MODEL_PATH.is_file():
+                raise RuntimeError(f"The Gemma GGUF was not found: {GGUF_MODEL_PATH}")
+            if not MMPROJ_MODEL_PATH.is_file():
+                raise RuntimeError(f"The vision projector was not found: {MMPROJ_MODEL_PATH}")
         if not self._is_running():
             self._start_server()
 
@@ -48,15 +50,18 @@ class LlamaManager:
     def _start_server(self) -> None:
         print("Starting llama.cpp with Gemma 4 image support...")
         creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        args = [
+            str(LLAMA_SERVER_PATH),
+            "--host", "127.0.0.1",
+            "--port", "8080",
+            "--jinja",
+        ]
+        if LLAMA_HF_REPO:
+            args.extend(["--hf-repo", LLAMA_HF_REPO])
+        else:
+            args.extend(["--model", str(GGUF_MODEL_PATH), "--mmproj", str(MMPROJ_MODEL_PATH)])
         self.process = subprocess.Popen(
-            [
-                str(LLAMA_SERVER_PATH),
-                "--model", str(GGUF_MODEL_PATH),
-                "--mmproj", str(MMPROJ_MODEL_PATH),
-                "--host", "127.0.0.1",
-                "--port", "8080",
-                "--jinja",
-            ],
+            args,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=creation_flags,

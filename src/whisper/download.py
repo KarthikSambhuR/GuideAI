@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 
 DEFAULT_URL = (
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/models/ggml-base.en.bin"
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
 )
 
 CHUNK_SIZE = 64 * 1024

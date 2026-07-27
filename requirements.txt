@@ -3,3 +3,4 @@ sounddevice
 pywhispercpp
 pynput
 pyautogui
+PyQt5
