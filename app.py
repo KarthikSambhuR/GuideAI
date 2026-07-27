@@ -35,6 +35,8 @@ def main() -> None:
                 action, value = voice.ui_events.get_nowait()
                 if action == "show":
                     pill.show()
+                elif action == "thinking":
+                    pill.show_thinking()
                 elif action == "hide":
                     pill.hide()
                 elif action == "level" and value is not None:
@@ -44,6 +46,7 @@ def main() -> None:
         try:
             while True:
                 response = ui_events.get_nowait()
+                pill.hide()
                 overlay.show(
                     response["annotations"],
                     on_target_click=lambda target, question=response["question"]:
@@ -52,6 +55,7 @@ def main() -> None:
         except queue.Empty:
             pass
         pill.root.after(33, process_ui_events)
+
 
     process_ui_events()
     try:
