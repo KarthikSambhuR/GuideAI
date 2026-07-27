@@ -17,3 +17,10 @@ LLAMA_START_TIMEOUT_SECONDS = 180
 LLAMA_REQUEST_TIMEOUT_SECONDS = 180
 
 OVERLAY_DURATION_MS = 8_000
+
+# Screenshot compression settings.
+# Reduce these to speed up LLM requests at the cost of visual detail.
+# Increase SCREENSHOT_JPEG_QUALITY (1-95) for sharper images.
+SCREENSHOT_MAX_WIDTH = 1280
+SCREENSHOT_MAX_HEIGHT = 720
+SCREENSHOT_JPEG_QUALITY = 50
