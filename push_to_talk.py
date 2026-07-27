@@ -10,6 +10,7 @@ from pynput import keyboard
 from pywhispercpp.model import Model
 
 from config import MAX_RECORDING_SECONDS, SAMPLE_RATE
+from whisper_utils import transcribe_buffer
 
 # Windows virtual-key code for F8.
 _VK_F8 = 0x77
@@ -95,11 +96,7 @@ class PushToTalk:
             if not chunks:
                 return
             audio = np.concatenate(chunks, axis=0).squeeze()
-            audio = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
-            peak = np.max(np.abs(audio))
-            if peak:
-                audio /= peak
-            transcript = " ".join(segment.text for segment in self.model.transcribe(audio)).strip()
+            transcript = transcribe_buffer(audio, self.model)
             if transcript:
                 print(f"GuideAI heard: {transcript}")
                 self.on_transcript(transcript)
