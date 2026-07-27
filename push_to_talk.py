@@ -11,9 +11,12 @@ from pywhispercpp.model import Model
 
 from config import MAX_RECORDING_SECONDS, SAMPLE_RATE
 
+# Windows virtual-key code for F8.
+_VK_F8 = 0x77
+
 
 class PushToTalk:
-    """Record while F8 is held and immediately free F8 after transcription."""
+    """Record while F8 is held; F8 is suppressed so other apps never see it."""
 
     def __init__(self, model: Model, on_transcript: Callable[[str], None]) -> None:
         self.model = model
@@ -21,7 +24,31 @@ class PushToTalk:
         self.ui_events: queue.Queue[tuple[str, float | None]] = queue.Queue()
         self.recording = threading.Event()
         self.stop_recording = threading.Event()
-        self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+        self.listener = keyboard.Listener(
+            on_press=self._on_press,
+            on_release=self._on_release,
+            win32_event_filter=self._win32_event_filter,
+        )
+
+    # ------------------------------------------------------------------
+    # Hotkey suppression
+    # ------------------------------------------------------------------
+
+    def _win32_event_filter(self, msg: int, data: object) -> bool:
+        """Block F8 from reaching any other application on Windows.
+
+        pynput calls this hook before the event is forwarded to the OS
+        event queue.  Calling ``suppress_event()`` drops F8 entirely so
+        that no other window (browser, editor, …) ever receives it.
+        All other keys are passed through unchanged.
+        """
+        if getattr(data, "vkCode", None) == _VK_F8:
+            self.listener.suppress_event()
+        return True
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     def start(self) -> None:
         self.listener.start()
@@ -30,6 +57,10 @@ class PushToTalk:
     def stop(self) -> None:
         self.stop_recording.set()
         self.listener.stop()
+
+    # ------------------------------------------------------------------
+    # Key handlers
+    # ------------------------------------------------------------------
 
     def _on_press(self, key: keyboard.Key | keyboard.KeyCode | None) -> None:
         if key == keyboard.Key.f8 and not self.recording.is_set():
@@ -40,6 +71,10 @@ class PushToTalk:
     def _on_release(self, key: keyboard.Key | keyboard.KeyCode | None) -> None:
         if key == keyboard.Key.f8:
             self.stop_recording.set()
+
+    # ------------------------------------------------------------------
+    # Audio recording & transcription
+    # ------------------------------------------------------------------
 
     def _record(self) -> None:
         chunks: list[np.ndarray] = []
