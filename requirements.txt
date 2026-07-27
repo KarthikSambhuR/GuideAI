@@ -3,3 +3,5 @@ sounddevice
 pywhispercpp
 pynput
 pyautogui
+python-dotenv
+mss

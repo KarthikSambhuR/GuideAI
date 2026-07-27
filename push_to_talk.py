@@ -10,12 +10,13 @@ from pynput import keyboard
 from pywhispercpp.model import Model
 
 from config import MAX_RECORDING_SECONDS, SAMPLE_RATE
+from screen import capture_screenshot
 
 
 class PushToTalk:
     """Record while F8 is held and immediately free F8 after transcription."""
 
-    def __init__(self, model: Model, on_transcript: Callable[[str], None]) -> None:
+    def __init__(self, model: Model, on_transcript: Callable[[str, str | None], None]) -> None:
         self.model = model
         self.on_transcript = on_transcript
         self.ui_events: queue.Queue[tuple[str, float | None]] = queue.Queue()
@@ -53,23 +54,37 @@ class PushToTalk:
             rms = float(np.sqrt(np.mean(np.square(chunk))))
             self.ui_events.put(("level", min(rms * 8, 1.0)))
 
+        pre_captured_screenshot: str | None = None
         try:
             with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=capture):
                 self.stop_recording.wait(MAX_RECORDING_SECONDS)
-            self.ui_events.put(("hide", None))
+
+            # Instantly pre-capture screenshot at the exact moment recording stops
+            try:
+                pre_captured_screenshot = capture_screenshot()
+            except Exception as err:
+                print(f"Pre-screenshot capture error: {err}")
+
+            self.ui_events.put(("thinking", None))
+
             if not chunks:
+                self.ui_events.put(("hide", None))
                 return
+
             audio = np.concatenate(chunks, axis=0).squeeze()
             audio = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
             peak = np.max(np.abs(audio))
             if peak:
                 audio /= peak
+
             transcript = " ".join(segment.text for segment in self.model.transcribe(audio)).strip()
             if transcript:
                 print(f"GuideAI heard: {transcript}")
-                self.on_transcript(transcript)
+                self.on_transcript(transcript, pre_captured_screenshot)
+            else:
+                self.ui_events.put(("hide", None))
         except Exception as error:
             print(f"Microphone/transcription error: {error}")
-        finally:
             self.ui_events.put(("hide", None))
+        finally:
             self.recording.clear()
