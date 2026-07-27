@@ -209,6 +209,7 @@ class AnnotationOverlay:
         left, top, right, bottom, target = self._target
         if left <= x <= right and top <= y <= bottom:
             self._target = None
+            self.hide()
             if self._on_target_click:
                 self._on_target_click(target)
 
