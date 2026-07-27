@@ -2,6 +2,7 @@
 
 import json
 import queue
+import re
 import threading
 from collections.abc import Callable
 from urllib.request import Request, urlopen
@@ -83,6 +84,51 @@ class QuestionProcessor:
             finally:
                 self.questions.task_done()
 
+    def _parse_llm_json(self, raw: str) -> dict:
+        """Robustly parse a JSON object from the model's raw text output.
+
+        The model may wrap its JSON in markdown code fences or include
+        trailing prose.  This method tries three strategies in order:
+
+        1. Plain ``json.loads`` on the full string (fast path, covers
+           well-behaved responses).
+        2. Strip markdown code fences (`` ```json … ``` `` or `` ``` … `` ``)
+           then parse again.
+        3. Use a regex to extract the first ``{ … }`` block and parse that.
+
+        Raises ``ValueError`` if all strategies fail.
+        """
+        text = raw.strip()
+
+        # Strategy 1 — plain parse.
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 2 — strip markdown fences.
+        fence_re = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+        match = fence_re.search(text)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # Strategy 3 — extract first {...} block.
+        brace_re = re.compile(r"(\{.*\})", re.DOTALL)
+        match = brace_re.search(text)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        raise ValueError(
+            f"Could not parse JSON from model output. "
+            f"First 200 chars: {text[:200]!r}"
+        )
+
     def _ask_model(self, question: str, completed_target: dict | None = None) -> dict:
         screenshot = capture_screenshot()
         continuation = ""
@@ -115,7 +161,8 @@ class QuestionProcessor:
         )
         with urlopen(request, timeout=LLAMA_REQUEST_TIMEOUT_SECONDS) as response:
             payload = json.load(response)
-        result = json.loads(payload["choices"][0]["message"]["content"])
+        raw_content = payload["choices"][0]["message"]["content"]
+        result = self._parse_llm_json(raw_content)
         if not isinstance(result.get("answer"), str) or not isinstance(result.get("annotations"), list):
             raise ValueError("Gemma returned an invalid guidance response.")
         result["annotations"] = [

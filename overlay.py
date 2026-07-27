@@ -109,29 +109,98 @@ class AnnotationOverlay:
         x, y = self._point(item.get("x"), item.get("y"))
         self._caption(x, y, str(item.get("text", "")))
 
+    # Banner geometry constants
+    _BANNER_W = 480
+    _HEADER_H = 28
+    _BODY_H = 90
+    _BANNER_H = _HEADER_H + _BODY_H
+    _PAD = 12
+
     def _caption(self, x: float, y: float, text: str) -> None:
-        """Draw a high-contrast tutorial card that remains visible on any desktop."""
+        """Draw a branded instruction banner with a header strip and body text.
+
+        Layout
+        ------
+        ┌─────────────────────────────────────────┐  ← cyan header (28 px)
+        │  ✦ GuideAI                              │
+        ├─────────────────────────────────────────┤
+        │  <step text, word-wrapped>              │  ← dark body  (90 px)
+        │                   click target to cont →│
+        └─────────────────────────────────────────┘
+        """
         if not text:
             return
-        left = min(max(8, x), max(8, self.width - 440))
-        top = min(max(8, y), max(8, self.height - 100))
-        right = min(self.width - 8, left + 430)
-        bottom = min(self.height - 8, top + 86)
-        self.canvas.create_rectangle(left, top, right, bottom, fill="#102a43", outline=self.COLOR, width=2)
+
+        w, h = self._BANNER_W, self._BANNER_H
+        # Pin the banner so it never goes off-screen.
+        left = int(min(max(self._PAD, x), self.width - w - self._PAD))
+        top = int(min(max(self._PAD, y), self.height - h - self._PAD))
+        right = left + w
+        mid = top + self._HEADER_H
+        bottom = top + h
+
+        # ── outer border ────────────────────────────────────────────────
+        self.canvas.create_rectangle(
+            left, top, right, bottom,
+            fill="#0d1f2d", outline=self.COLOR, width=2,
+        )
+
+        # ── cyan header strip ────────────────────────────────────────────
+        self.canvas.create_rectangle(
+            left + 2, top + 2, right - 2, mid,
+            fill="#0a9dba", outline="",
+        )
         self.canvas.create_text(
-            left + 12, top + 10, text=text, anchor=tk.NW, fill="white",
-            font=("Segoe UI", 12, "bold"), justify=tk.LEFT, width=400,
+            left + self._PAD, top + self._HEADER_H // 2,
+            text="✦ GuideAI",
+            anchor=tk.W, fill="#ffffff",
+            font=("Segoe UI", 10, "bold"),
+        )
+
+        # ── separator line ───────────────────────────────────────────────
+        self.canvas.create_line(
+            left + 2, mid, right - 2, mid,
+            fill=self.COLOR, width=1,
+        )
+
+        # ── step text ────────────────────────────────────────────────────
+        self.canvas.create_text(
+            left + self._PAD, mid + 8,
+            text=text,
+            anchor=tk.NW, fill="#e8f4f8",
+            font=("Segoe UI", 11, "bold"),
+            justify=tk.LEFT,
+            width=w - self._PAD * 2,
+        )
+
+        # ── hint line ────────────────────────────────────────────────────
+        self.canvas.create_text(
+            right - self._PAD, bottom - 8,
+            text="click the highlighted target to continue →",
+            anchor=tk.SE, fill="#5ba3b8",
+            font=("Segoe UI", 8),
         )
 
     def _label(self, x: float, y: float, label: str) -> None:
+        """Draw a label with a dark pill background so it reads on any wallpaper."""
         if not label:
             return
-        label_x = min(max(8, x + 8), max(8, self.width - 360))
-        label_y = min(max(20, y - 8), self.height - 8)
+        lx = min(max(8, x + 8), max(8, self.width - 360))
+        ly = min(max(20, y - 8), self.height - 8)
+        # Measure approximate text bbox and draw a backing rectangle first.
+        char_w, char_h = 7, 15
+        tw = min(len(label) * char_w, 350)
+        th = char_h
+        pad = 4
+        self.canvas.create_rectangle(
+            lx - pad, ly - th - pad,
+            lx + tw + pad, ly + pad,
+            fill="#0d1f2d", outline=self.COLOR, width=1,
+        )
         self.canvas.create_text(
-            label_x, label_y, text=label, anchor=tk.SW, fill="white",
-            font=("Segoe UI", 12, "bold"),
-            justify=tk.LEFT, width=360,
+            lx, ly, text=label, anchor=tk.SW, fill="#e8f4f8",
+            font=("Segoe UI", 11, "bold"),
+            justify=tk.LEFT, width=350,
         )
 
     def _on_click(self, x: int, y: int, button: mouse.Button, pressed: bool) -> None:
