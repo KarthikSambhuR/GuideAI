@@ -19,3 +19,4 @@ openvino_env/
 
 # Large local model weights
 *.gguf
+models/
