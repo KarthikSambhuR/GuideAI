@@ -24,3 +24,8 @@ OVERLAY_DURATION_MS = 8_000
 SCREENSHOT_MAX_WIDTH = 1280
 SCREENSHOT_MAX_HEIGHT = 720
 SCREENSHOT_JPEG_QUALITY = 50
+
+# Ollama runtime configurations (used by ollama_manager.py)
+OLLAMA_MODEL = "gemma-4-e2b-local"
+OLLAMA_START_TIMEOUT_SECONDS = 60
+OLLAMA_TAGS_URL = "http://127.0.0.1:11434/api/tags"

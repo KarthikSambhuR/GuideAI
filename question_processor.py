@@ -81,6 +81,7 @@ class QuestionProcessor:
                 self.on_response(response)
             except Exception as error:
                 print(f"GuideAI request error: {error}")
+                self.on_response({"status": "error", "error": str(error)})
             finally:
                 self.questions.task_done()
 

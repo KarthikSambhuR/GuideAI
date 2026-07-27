@@ -44,11 +44,14 @@ def main() -> None:
         try:
             while True:
                 response = ui_events.get_nowait()
-                overlay.show(
-                    response["annotations"],
-                    on_target_click=lambda target, question=response["question"]:
-                        questions.continue_tutorial(question, target),
-                )
+                if response.get("status") == "error":
+                    overlay.show_error(response["error"])
+                else:
+                    overlay.show(
+                        response["annotations"],
+                        on_target_click=lambda target, question=response["question"]:
+                            questions.continue_tutorial(question, target),
+                    )
         except queue.Empty:
             pass
         pill.root.after(33, process_ui_events)
