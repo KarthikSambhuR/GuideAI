@@ -179,4 +179,12 @@ class QuestionProcessor:
             "text": result["answer"],
         })
         result["question"] = question
+
+        # Save an annotated copy locally for developer verification (Issue #16)
+        try:
+            from screen import save_debug_image
+            save_debug_image(screenshot, result["annotations"])
+        except Exception as err:
+            print(f"GuideAI debug: failed to save step image: {err}")
+
         return result
