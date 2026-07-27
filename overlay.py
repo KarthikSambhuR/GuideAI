@@ -31,14 +31,82 @@ class AnnotationOverlay:
         )
         self.canvas.pack()
         self._hide_after: str | None = None
+        self._scanning_after: str | None = None
+        self._scan_y: float = 0.0
         self._on_target_click: Callable[[dict], None] | None = None
         self._target: tuple[float, float, float, float, dict] | None = None
         self._mouse_listener = mouse.Listener(on_click=self._on_click)
         self._mouse_listener.start()
         self._enable_click_through()
 
+    def start_scanning(self) -> None:
+        """Start drawing a visual screen sweep animation while model works."""
+        self.stop_scanning()
+        self.width = self.window.winfo_screenwidth()
+        self.height = self.window.winfo_screenheight()
+        self.window.geometry(f"{self.width}x{self.height}+0+0")
+        self.canvas.configure(width=self.width, height=self.height)
+        
+        # Show transparent window
+        self.window.deiconify()
+        self.window.lift()
+        self._enable_click_through()
+
+        self._scan_y = 0.0
+        self._animate_scan()
+
+    def stop_scanning(self) -> None:
+        """Cancel the scanning animation and clear related canvas elements."""
+        if self._scanning_after:
+            self.window.after_cancel(self._scanning_after)
+            self._scanning_after = None
+        # Only withdraw window if it was not drawn for other annotations
+        if not self._hide_after:
+            self.window.withdraw()
+
+    def _animate_scan(self) -> None:
+        """Perform one frame of the sweeping laser line animation."""
+        self.canvas.delete("all")
+        
+        # 1. Draw animated horizontal laser bar
+        y = int(self._scan_y)
+        self.canvas.create_line(0, y, self.width, y, fill=self.COLOR, width=4)
+        # Add a soft trailing aura
+        self.canvas.create_rectangle(
+            0, max(0, y - 24), self.width, y,
+            fill=self.COLOR, outline="", stipple="gray25" if tk.TkVersion >= 8.5 else ""
+        )
+
+        # 2. Draw high-tech HUD grid overlay (dotted or sparse line segments)
+        grid_size = 80
+        for gx in range(0, self.width, grid_size):
+            self.canvas.create_line(gx, 0, gx, self.height, fill="#123d47", width=1)
+        for gy in range(0, self.height, grid_size):
+            self.canvas.create_line(0, gy, self.width, gy, fill="#123d47", width=1)
+
+        # 3. Floating center status badge
+        cx, cy = self.width // 2, self.height // 2
+        bw, bh = 340, 56
+        self.canvas.create_rectangle(
+            cx - bw // 2, cy - bh // 2, cx + bw // 2, cy + bh // 2,
+            fill="#0d1f2d", outline=self.COLOR, width=2
+        )
+        self.canvas.create_text(
+            cx, cy, text="✦ GuideAI: Analyzing Desktop...",
+            fill="white", font=("Segoe UI", 12, "bold")
+        )
+
+        # Increment scan y coordinate
+        self._scan_y += self.height / 70.0  # complete sweep in ~70 frames (2s)
+        if self._scan_y > self.height:
+            self._scan_y = 0.0
+
+        # Loop next frame in 30ms
+        self._scanning_after = self.window.after(30, self._animate_scan)
+
     def show(self, annotations: Iterable[dict], on_target_click: Callable[[dict], None] | None = None) -> None:
         """Render normalized (0-1000) model coordinates on the actual screen."""
+        self.stop_scanning()
         self.width = self.window.winfo_screenwidth()
         self.height = self.window.winfo_screenheight()
         self.window.geometry(f"{self.width}x{self.height}+0+0")

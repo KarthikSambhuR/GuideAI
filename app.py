@@ -44,11 +44,19 @@ def main() -> None:
         try:
             while True:
                 response = ui_events.get_nowait()
-                overlay.show(
-                    response["annotations"],
-                    on_target_click=lambda target, question=response["question"]:
-                        questions.continue_tutorial(question, target),
-                )
+                status = response.get("status")
+                if status == "scanning":
+                    overlay.start_scanning()
+                elif status == "error":
+                    overlay.stop_scanning()
+                    print(f"GuideAI processing error: {response.get('error')}")
+                else:
+                    overlay.stop_scanning()
+                    overlay.show(
+                        response["annotations"],
+                        on_target_click=lambda target, question=response["question"]:
+                            questions.continue_tutorial(question, target),
+                    )
         except queue.Empty:
             pass
         pill.root.after(33, process_ui_events)
