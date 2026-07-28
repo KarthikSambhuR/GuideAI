@@ -46,6 +46,14 @@ arrow pointing to it. Use a short label such as \"1. Click Settings\". Never inv
 location that is not visibly supported by the screenshot."""
 
 
+def get_system_prompt(custom_context: str = "") -> str:
+    """Formulate the complete system prompt for guide instructions."""
+    if custom_context:
+        return f"{PROMPT}\n\nAdditional Context: {custom_context}"
+    return PROMPT
+
+
+
 class QuestionProcessor:
     """Queue questions so model work never blocks microphone input."""
 
