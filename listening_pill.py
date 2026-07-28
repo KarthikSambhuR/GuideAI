@@ -65,6 +65,11 @@ class ListeningPill:
         )
         self.set_level(0.0)
 
+    @staticmethod
+    def get_amplitude_level(rms: float) -> float:
+        """Calculate normalized amplitude visualizer level from input RMS sound level."""
+        return min(max(rms * 8.0, 0.0), 1.0)
+
     def set_level(self, level: float) -> None:
         if self.mode != "recording":
             return
