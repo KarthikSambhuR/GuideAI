@@ -18,6 +18,16 @@ from config import (
 )
 
 
+class LlamaContextLoader:
+    """Helper to manage LLM context parameters and server readiness state."""
+
+    def __init__(self, manager: "LlamaManager") -> None:
+        self.manager = manager
+
+    def is_context_ready(self) -> bool:
+        return self.manager._is_running()
+
+
 class LlamaManager:
     """Run the bundled llama.cpp server with Gemma's vision projector."""
 
