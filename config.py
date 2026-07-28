@@ -37,6 +37,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma-4-e2b-local")
 OLLAMA_START_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_START_TIMEOUT_SECONDS", "60"))
 OLLAMA_TAGS_URL = os.getenv("OLLAMA_TAGS_URL", "http://127.0.0.1:11434/api/tags")
 
+# Whisper multilingual configuration (e.g. "auto", "en", "es", "fr", "de", "hi")
+WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "en")
+
 OVERLAY_DURATION_MS = 8_000
 UI_FONT_FAMILY = "Segoe UI" if IS_WINDOWS else "DejaVu Sans"
 

@@ -13,10 +13,10 @@ from pathlib import Path
 import numpy as np
 from pywhispercpp.model import Model
 
-from config import SAMPLE_RATE
+from config import SAMPLE_RATE, WHISPER_LANGUAGE
 
 
-def transcribe_buffer(audio: np.ndarray, model: Model) -> str:
+def transcribe_buffer(audio: np.ndarray, model: Model, language: str = WHISPER_LANGUAGE) -> str:
     """Transcribe a normalised float32 NumPy audio array.
 
     Parameters
@@ -25,6 +25,8 @@ def transcribe_buffer(audio: np.ndarray, model: Model) -> str:
         1-D float32 array sampled at ``SAMPLE_RATE`` Hz, values in [-1, 1].
     model:
         A loaded ``pywhispercpp`` Whisper model instance.
+    language:
+        Language code (default: read from config WHISPER_LANGUAGE).
 
     Returns
     -------
@@ -36,7 +38,10 @@ def transcribe_buffer(audio: np.ndarray, model: Model) -> str:
     peak = np.max(np.abs(audio))
     if peak:
         audio = audio / peak
-    segments = model.transcribe(audio)
+    kwargs = {}
+    if language and language != "auto":
+        kwargs["language"] = language
+    segments = model.transcribe(audio, **kwargs)
     return " ".join(seg.text for seg in segments).strip()
 
 
