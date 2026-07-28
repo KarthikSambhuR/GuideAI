@@ -59,6 +59,11 @@ def _capture_full_screenshot():
     return pyautogui.screenshot()
 
 
+def capture_primary_monitor():
+    """Explicit helper to capture a PIL Image screenshot of the primary monitor."""
+    return _capture_full_screenshot()
+
+
 def capture_screenshot() -> str:
     """Return a compressed desktop screenshot as base64 JPEG.
 
