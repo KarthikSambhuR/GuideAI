@@ -4,6 +4,12 @@ import os
 import sys
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 IS_WINDOWS = sys.platform == "win32"
 
 SAMPLE_RATE = 16_000
