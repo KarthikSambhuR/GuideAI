@@ -7,3 +7,4 @@ pygetwindow
 python-dotenv
 mss
 PyQt5
+pystray
