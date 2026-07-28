@@ -26,7 +26,7 @@ def main() -> None:
     ui_events: queue.Queue[dict] = queue.Queue()
     questions = QuestionProcessor(ui_events.put)
     questions.start()
-    voice = PushToTalk(whisper, questions.submit)
+    voice = PushToTalk(whisper, lambda transcript, screenshot: questions.submit(transcript, screenshot))
     voice.start()
 
     def process_ui_events() -> None:
