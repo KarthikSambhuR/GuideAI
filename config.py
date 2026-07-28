@@ -1,7 +1,10 @@
 """Application settings kept in one place."""
 
-from pathlib import Path
 import os
+import sys
+from pathlib import Path
+
+IS_WINDOWS = sys.platform == "win32"
 
 SAMPLE_RATE = 16_000
 MAX_RECORDING_SECONDS = 60
@@ -26,3 +29,5 @@ OVERLAY_DURATION_MS = 8_000
 SCREENSHOT_MAX_WIDTH = 1280
 SCREENSHOT_MAX_HEIGHT = 720
 SCREENSHOT_JPEG_QUALITY = 50
+
+UI_FONT_FAMILY = "Segoe UI" if IS_WINDOWS else "DejaVu Sans"
