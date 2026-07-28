@@ -289,6 +289,20 @@ class AnnotationOverlay:
             "label": label,
         })
 
+    def _draw_spotlight_backdrop(self, x: float, y: float, w: float, h: float) -> None:
+        """Render a subtle stippled dark backdrop around the target to highlight it."""
+        try:
+            # Top strip
+            self.canvas.create_rectangle(0, 0, self.width, max(0, y), fill="#000000", outline="", stipple="gray25")
+            # Bottom strip
+            self.canvas.create_rectangle(0, min(self.height, y + h), self.width, self.height, fill="#000000", outline="", stipple="gray25")
+            # Left strip
+            self.canvas.create_rectangle(0, max(0, y), max(0, x), min(self.height, y + h), fill="#000000", outline="", stipple="gray25")
+            # Right strip
+            self.canvas.create_rectangle(min(self.width, x + w), max(0, y), self.width, min(self.height, y + h), fill="#000000", outline="", stipple="gray25")
+        except Exception:
+            pass
+
     def _draw_box(self, item: dict) -> None:
         x, y = self._point(item.get("x"), item.get("y"))
         width = self._number(item.get("width")) * self.width / 1000
@@ -299,6 +313,7 @@ class AnnotationOverlay:
         height = min(height, self.height - y)
         if width < 4 or height < 4:
             return
+        self._draw_spotlight_backdrop(x, y, width, height)
         box_item = self.canvas.create_rectangle(x, y, x + width, y + height, outline=self.COLOR, width=4)
         self._label(x, y, str(item.get("label", "")))
         if self._target is None:
