@@ -74,24 +74,42 @@ class PushToTalk:
             self.stop_recording.set()
 
     # ------------------------------------------------------------------
-    # Audio recording & transcription
+    # Audio recording & transcription (Buffered Queue Producer-Consumer)
     # ------------------------------------------------------------------
 
     def _record(self) -> None:
-        chunks: list[np.ndarray] = []
         self.ui_events.put(("show", None))
+        audio_queue: queue.Queue[np.ndarray] = queue.Queue()
 
         def capture(indata: np.ndarray, frames: int, time: object, status: sd.CallbackFlags) -> None:
             if status:
-                print(f"Audio status: {status}")
-            chunk = indata.copy()
-            chunks.append(chunk)
-            rms = float(np.sqrt(np.mean(np.square(chunk))))
-            self.ui_events.put(("level", min(rms * 8, 1.0)))
+                print(f"Audio callback status: {status}")
+            # Thread-safe queue push (fast, non-blocking for real-time audio thread safety)
+            audio_queue.put(indata.copy())
+
+        chunks: list[np.ndarray] = []
+        stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=capture)
 
         try:
-            with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=capture):
-                self.stop_recording.wait(MAX_RECORDING_SECONDS)
+            with stream:
+                # We expect sounddevice callbacks approximately every 50-100ms.
+                # Stop recording when stop_recording is set or when we hit MAX_RECORDING_SECONDS.
+                total_duration = 0.0
+                while not self.stop_recording.is_set() and total_duration < MAX_RECORDING_SECONDS:
+                    try:
+                        # Pull chunks from the buffer queue with a short timeout
+                        chunk = audio_queue.get(timeout=0.05)
+                        chunks.append(chunk)
+                        
+                        # Perform heavy RMS calculation and duration updates on the worker thread
+                        rms = float(np.sqrt(np.mean(np.square(chunk))))
+                        self.ui_events.put(("level", min(rms * 8, 1.0)))
+                        
+                        # Add duration of the chunk to the accumulator
+                        total_duration += len(chunk) / SAMPLE_RATE
+                    except queue.Empty:
+                        continue
+
             self.ui_events.put(("hide", None))
             if not chunks:
                 return

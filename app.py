@@ -44,9 +44,16 @@ def main() -> None:
         try:
             while True:
                 response = ui_events.get_nowait()
-                if response.get("status") == "error":
-                    overlay.show_error(response["error"])
+                status = response.get("status")
+                if status == "scanning":
+                    overlay.start_scanning()
+                elif status == "error":
+                    overlay.stop_scanning()
+                    error_msg = response.get("error")
+                    print(f"GuideAI processing error: {error_msg}")
+                    overlay.show_error(error_msg)
                 else:
+                    overlay.stop_scanning()
                     overlay.show(
                         response["annotations"],
                         on_target_click=lambda target, question=response["question"]:
