@@ -11,12 +11,15 @@ from push_to_talk import PushToTalk
 from question_processor import QuestionProcessor
 
 
+from logger import logger
+
+
 def main() -> None:
     llama = LlamaManager()
     try:
         llama.ensure_ready()
     except RuntimeError as error:
-        print(f"GuideAI startup error: {error}")
+        logger.error(f"GuideAI startup error: {error}")
         return
 
     print("Loading the Whisper model...")
