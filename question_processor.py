@@ -76,11 +76,14 @@ class QuestionProcessor:
                 return
             question, completed_target = task
             try:
+                self.on_response({"status": "scanning"})
                 response = self._ask_model(question, completed_target)
                 print(f"GuideAI: {response['answer']}\n")
+                response["status"] = "done"
                 self.on_response(response)
             except Exception as error:
                 print(f"GuideAI request error: {error}")
+                self.on_response({"status": "error", "error": str(error)})
             finally:
                 self.questions.task_done()
 
