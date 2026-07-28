@@ -48,6 +48,14 @@ SCREENSHOT_MAX_HEIGHT = 720
 SCREENSHOT_JPEG_QUALITY = 50
 
 
+def validate_hotkey_config(hotkey_name: str = "f8") -> bool:
+    """Validate hotkey string configuration name."""
+    if not isinstance(hotkey_name, str) or not hotkey_name.strip():
+        return False
+    valid_keys = {"f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12", "space", "ctrl", "alt"}
+    return hotkey_name.lower().strip() in valid_keys
+
+
 class ConfigManager:
     """Central configuration manager providing validated runtime settings."""
 
