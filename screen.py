@@ -3,6 +3,13 @@
 import base64
 from io import BytesIO
 
+try:
+    import mss
+    import mss.tools
+    HAS_MSS = True
+except ImportError:
+    HAS_MSS = False
+
 import pyautogui
 
 from config import (
@@ -34,19 +41,34 @@ def _get_active_window_rect() -> tuple[int, int, int, int] | None:
         return None
 
 
+def _capture_full_screenshot():
+    """Return a PIL Image of the full primary monitor.
+
+    Uses ``mss`` for high-performance multi-monitor capture when available,
+    with ``pyautogui`` as the fallback.
+    """
+    if HAS_MSS:
+        try:
+            with mss.mss() as sct:
+                monitor = sct.monitors[1]  # primary monitor
+                raw = sct.grab(monitor)
+                from PIL import Image
+                return Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
+        except Exception as err:
+            print(f"GuideAI screen: mss capture failed ({err}), falling back to pyautogui")
+    return pyautogui.screenshot()
+
+
 def capture_screenshot() -> str:
     """Return a compressed desktop screenshot as base64 JPEG.
 
-    If a focused window can be detected, the screenshot is cropped to that
-    window's bounds so the vision model receives a tighter, higher-detail
-    view of the relevant UI. Falls back to the full desktop when the
-    active window cannot be determined.
+    Attempts ``mss`` (fast, multi-monitor) first, falls back to
+    ``pyautogui``. If a focused window can be detected, the image is
+    cropped to that window's bounds before encoding.
 
-    Resolution and JPEG quality are read from ``config.py``:
-    * ``SCREENSHOT_MAX_WIDTH`` / ``SCREENSHOT_MAX_HEIGHT``: thumbnail ceiling.
-    * ``SCREENSHOT_JPEG_QUALITY``: JPEG quality (1–95; lower = smaller file).
+    Resolution and JPEG quality are read from ``config.py``.
     """
-    full = pyautogui.screenshot()
+    full = _capture_full_screenshot()
     rect = _get_active_window_rect()
     if rect is not None:
         left, top, right, bottom = rect
