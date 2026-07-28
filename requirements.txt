@@ -4,3 +4,6 @@ pywhispercpp
 pynput
 pyautogui
 pygetwindow
+python-dotenv
+mss
+PyQt5

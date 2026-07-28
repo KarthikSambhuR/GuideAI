@@ -26,7 +26,7 @@ def main() -> None:
     ui_events: queue.Queue[dict] = queue.Queue()
     questions = QuestionProcessor(ui_events.put)
     questions.start()
-    voice = PushToTalk(whisper, questions.submit)
+    voice = PushToTalk(whisper, lambda transcript, screenshot: questions.submit(transcript, screenshot))
     voice.start()
 
     def process_ui_events() -> None:
@@ -49,8 +49,9 @@ def main() -> None:
                     overlay.start_scanning()
                 elif status == "error":
                     overlay.stop_scanning()
-                    overlay.show_error(response.get("error", "Unknown error"))
-                    print(f"GuideAI processing error: {response.get('error')}")
+                    error_msg = response.get("error", "Unknown error")
+                    print(f"GuideAI processing error: {error_msg}")
+                    overlay.show_error(error_msg)
                 else:
                     overlay.stop_scanning()
                     overlay.show(

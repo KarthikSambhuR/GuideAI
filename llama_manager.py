@@ -10,6 +10,7 @@ from config import (
     GGUF_MODEL_PATH,
     IS_WINDOWS,
     LLAMA_GPU_LAYERS,
+    LLAMA_HF_REPO,
     LLAMA_SERVER_MODELS_URL,
     LLAMA_SERVER_PATH,
     LLAMA_START_TIMEOUT_SECONDS,
@@ -24,16 +25,19 @@ class LlamaManager:
         self.process: subprocess.Popen[bytes] | None = None
 
     def ensure_ready(self) -> None:
-        if not GGUF_MODEL_PATH.is_file():
-            raise RuntimeError(f"The Gemma GGUF was not found: {GGUF_MODEL_PATH}")
-        if not MMPROJ_MODEL_PATH.is_file():
-            raise RuntimeError(f"The vision projector was not found: {MMPROJ_MODEL_PATH}")
-
         server_bin = str(LLAMA_SERVER_PATH)
         if not LLAMA_SERVER_PATH.is_file() and not shutil.which(server_bin):
             raise RuntimeError(
                 f"llama-server executable was not found at {LLAMA_SERVER_PATH} or on PATH."
             )
+
+        # In HF repo mode, local model files are not required — llama-server
+        # downloads them automatically via --hf-repo.
+        if not LLAMA_HF_REPO:
+            if not GGUF_MODEL_PATH.is_file():
+                raise RuntimeError(f"The Gemma GGUF was not found: {GGUF_MODEL_PATH}")
+            if not MMPROJ_MODEL_PATH.is_file():
+                raise RuntimeError(f"The vision projector was not found: {MMPROJ_MODEL_PATH}")
 
         if not self._is_running():
             self._start_server()
@@ -63,14 +67,20 @@ class LlamaManager:
             if LLAMA_SERVER_PATH.is_file()
             else (shutil.which(str(LLAMA_SERVER_PATH)) or str(LLAMA_SERVER_PATH))
         )
+
         cmd = [
             server_cmd,
-            "--model", str(GGUF_MODEL_PATH),
-            "--mmproj", str(MMPROJ_MODEL_PATH),
             "--host", "127.0.0.1",
             "--port", "8080",
             "--jinja",
         ]
+
+        if LLAMA_HF_REPO:
+            # Repo mode: llama-server downloads the model from HuggingFace
+            cmd.extend(["--hf-repo", LLAMA_HF_REPO])
+        else:
+            cmd.extend(["--model", str(GGUF_MODEL_PATH), "--mmproj", str(MMPROJ_MODEL_PATH)])
+
         # Only add -ngl when GPU offloading is requested
         if LLAMA_GPU_LAYERS > 0:
             cmd.extend(["-ngl", str(LLAMA_GPU_LAYERS)])
