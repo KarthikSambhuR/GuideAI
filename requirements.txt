@@ -4,3 +4,4 @@ pywhispercpp
 pynput
 pyautogui
 pygetwindow
+mss
