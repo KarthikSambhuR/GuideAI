@@ -12,6 +12,7 @@ LLAMA_SERVER_HEALTH_URL = os.getenv("LLAMA_SERVER_HEALTH_URL", "http://127.0.0.1
 LLAMA_SERVER_MODELS_URL = os.getenv("LLAMA_SERVER_MODELS_URL", "http://127.0.0.1:8080/v1/models")
 # The local llama.cpp server accepts any client-visible model label.
 LLAMA_MODEL = os.getenv("LLAMA_MODEL", "gemma-4-e2b-local")
+LLAMA_HF_REPO = os.getenv("LLAMA_HF_REPO", "")  # e.g. "unsloth/gemma-4-E2B-it-GGUF:Q4_K_M"
 GGUF_MODEL_PATH = Path(os.getenv("GGUF_MODEL_PATH", r"C:\Users\eren\GuideAI\GuideAI\models\unsloth-gemma-4-E2B-it-GGUF\MTP\mtp-gemma-4-E2B-it-Q8_0.gguf"))
 MMPROJ_MODEL_PATH = Path(os.getenv("MMPROJ_MODEL_PATH", r"C:\Users\eren\GuideAI\GuideAI\models\unsloth-gemma-4-E2B-it-GGUF\MTP\mtp-gemma-4-E2B-it-BF16.gguf"))
 LLAMA_SERVER_PATH = Path(os.getenv("LLAMA_SERVER_PATH", r"C:\Users\eren\GuideAI\GuideAI\bin\llama-server.exe"))
