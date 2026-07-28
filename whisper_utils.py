@@ -106,3 +106,38 @@ def transcribe_wav(path: str | Path, model: Model) -> str:
     print(f"GuideAI whisper_utils: transcribing {path.name} "
           f"({len(samples) / SAMPLE_RATE:.1f}s @ {SAMPLE_RATE} Hz)")
     return transcribe_buffer(samples.astype(np.float32), model)
+
+
+def save_audio_to_wav(audio: np.ndarray, output_path: str | Path, sample_rate: int = SAMPLE_RATE) -> Path:
+    """Save a 1D float32 audio NumPy buffer to a 16kHz mono 16-bit PCM WAV file.
+
+    Parameters
+    ----------
+    audio:
+        1-D float32 array with sample values in [-1, 1].
+    output_path:
+        Destination file path for the .wav output.
+    sample_rate:
+        Target sample rate in Hz (default: 16,000 Hz).
+
+    Returns
+    -------
+    Path
+        Path to the saved WAV file.
+    """
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Normalize and scale to int16 PCM
+    audio_clean = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
+    audio_pcm16 = (audio_clean * 32767.0).astype(np.int16)
+
+    with wave.open(str(path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # 16-bit PCM
+        wf.setframerate(sample_rate)
+        wf.writeframes(audio_pcm16.tobytes())
+
+    print(f"GuideAI whisper_utils: saved audio buffer to {path} ({len(audio) / sample_rate:.2f}s)")
+    return path
+
