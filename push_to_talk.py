@@ -16,6 +16,19 @@ from whisper_utils import transcribe_buffer
 _VK_F8 = 0x77
 
 
+class KeyboardShortcutListener:
+    """Basic keyboard shortcut listener helper wrapping pynput keyboard.Listener."""
+
+    def __init__(self, on_press: Callable, on_release: Callable) -> None:
+        self.listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+
+    def start(self) -> None:
+        self.listener.start()
+
+    def stop(self) -> None:
+        self.listener.stop()
+
+
 class PushToTalk:
     """Record while F8 is held; F8 is suppressed so other apps never see it."""
 
