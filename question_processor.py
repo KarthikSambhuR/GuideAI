@@ -51,22 +51,22 @@ class QuestionProcessor:
 
     def __init__(self, on_response: Callable[[dict], None]) -> None:
         self.on_response = on_response
-        self.questions: queue.Queue[tuple[str, dict | None] | None] = queue.Queue()
+        self.questions: queue.Queue[tuple[str, dict | None, str | None] | None] = queue.Queue()
         self._history: list[dict] = []
         self.worker = threading.Thread(target=self._run, daemon=True, name="vision-request-worker")
 
     def start(self) -> None:
         self.worker.start()
 
-    def submit(self, question: str) -> None:
+    def submit(self, question: str, pre_captured_screenshot: str | None = None) -> None:
         self._history = []
-        self.questions.put((question, None))
+        self.questions.put((question, None, pre_captured_screenshot))
         print("GuideAI: question queued.")
 
     def continue_tutorial(self, question: str, completed_target: dict) -> None:
         """Capture the updated screen and ask the model for the next click."""
         self._history.append(completed_target)
-        self.questions.put((question, completed_target))
+        self.questions.put((question, completed_target, None))
         print(f"GuideAI: click detected (completed: {completed_target.get('label', 'unlabeled')}); finding the next step...")
 
     def stop(self) -> None:
@@ -77,10 +77,10 @@ class QuestionProcessor:
             task = self.questions.get()
             if task is None:
                 return
-            question, completed_target = task
+            question, completed_target, pre_captured_screenshot = task
             try:
                 self.on_response({"status": "scanning"})
-                response = self._ask_model(question, completed_target)
+                response = self._ask_model(question, completed_target, pre_captured_screenshot)
                 print(f"GuideAI: {response['answer']}\n")
                 response["status"] = "done"
                 self.on_response(response)
@@ -135,8 +135,13 @@ class QuestionProcessor:
             f"First 200 chars: {text[:200]!r}"
         )
 
-    def _ask_model(self, question: str, completed_target: dict | None = None) -> dict:
-        screenshot = capture_screenshot()
+    def _ask_model(
+        self,
+        question: str,
+        completed_target: dict | None = None,
+        pre_captured_screenshot: str | None = None,
+    ) -> dict:
+        screenshot = pre_captured_screenshot or capture_screenshot()
         continuation = ""
         if self._history:
             steps_summary = []
