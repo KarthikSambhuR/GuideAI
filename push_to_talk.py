@@ -149,3 +149,13 @@ class PushToTalk:
             self.ui_events.put(("hide", None))
         finally:
             self.recording.clear()
+
+    @staticmethod
+    def get_raw_audio_bytes(chunks: list[np.ndarray]) -> bytes:
+        """Convert float32 audio chunks into raw 16-bit PCM bytes."""
+        if not chunks:
+            return b""
+        audio = np.concatenate(chunks, axis=0).squeeze()
+        audio = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
+        return (audio * 32767.0).astype(np.int16).tobytes()
+
