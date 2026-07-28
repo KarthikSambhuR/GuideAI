@@ -49,6 +49,7 @@ def main() -> None:
                     overlay.start_scanning()
                 elif status == "error":
                     overlay.stop_scanning()
+                    overlay.show_error(response.get("error", "Unknown error"))
                     print(f"GuideAI processing error: {response.get('error')}")
                 else:
                     overlay.stop_scanning()

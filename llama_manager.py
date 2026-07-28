@@ -1,5 +1,6 @@
 """Start and validate the local llama.cpp vision server used by GuideAI."""
 
+import shutil
 import subprocess
 import time
 from urllib.error import URLError
@@ -7,6 +8,8 @@ from urllib.request import urlopen
 
 from config import (
     GGUF_MODEL_PATH,
+    IS_WINDOWS,
+    LLAMA_GPU_LAYERS,
     LLAMA_SERVER_MODELS_URL,
     LLAMA_SERVER_PATH,
     LLAMA_START_TIMEOUT_SECONDS,
@@ -25,8 +28,13 @@ class LlamaManager:
             raise RuntimeError(f"The Gemma GGUF was not found: {GGUF_MODEL_PATH}")
         if not MMPROJ_MODEL_PATH.is_file():
             raise RuntimeError(f"The vision projector was not found: {MMPROJ_MODEL_PATH}")
-        if not LLAMA_SERVER_PATH.is_file():
-            raise RuntimeError(f"llama-server.exe was not found: {LLAMA_SERVER_PATH}")
+
+        server_bin = str(LLAMA_SERVER_PATH)
+        if not LLAMA_SERVER_PATH.is_file() and not shutil.which(server_bin):
+            raise RuntimeError(
+                f"llama-server executable was not found at {LLAMA_SERVER_PATH} or on PATH."
+            )
+
         if not self._is_running():
             self._start_server()
 
@@ -46,21 +54,34 @@ class LlamaManager:
             return False
 
     def _start_server(self) -> None:
-        print("Starting llama.cpp with Gemma 4 image support...")
-        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        print(f"Starting llama.cpp with Gemma 4 image support (GPU layers: {LLAMA_GPU_LAYERS})...")
+        creation_flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WINDOWS else 0
+
+        # Resolve server binary: prefer the configured path, fall back to PATH lookup
+        server_cmd = (
+            str(LLAMA_SERVER_PATH)
+            if LLAMA_SERVER_PATH.is_file()
+            else (shutil.which(str(LLAMA_SERVER_PATH)) or str(LLAMA_SERVER_PATH))
+        )
+        cmd = [
+            server_cmd,
+            "--model", str(GGUF_MODEL_PATH),
+            "--mmproj", str(MMPROJ_MODEL_PATH),
+            "--host", "127.0.0.1",
+            "--port", "8080",
+            "--jinja",
+        ]
+        # Only add -ngl when GPU offloading is requested
+        if LLAMA_GPU_LAYERS > 0:
+            cmd.extend(["-ngl", str(LLAMA_GPU_LAYERS)])
+
         self.process = subprocess.Popen(
-            [
-                str(LLAMA_SERVER_PATH),
-                "--model", str(GGUF_MODEL_PATH),
-                "--mmproj", str(MMPROJ_MODEL_PATH),
-                "--host", "127.0.0.1",
-                "--port", "8080",
-                "--jinja",
-            ],
+            cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             creationflags=creation_flags,
         )
+
         deadline = time.monotonic() + LLAMA_START_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             if self._is_running():
