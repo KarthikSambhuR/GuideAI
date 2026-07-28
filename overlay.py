@@ -4,15 +4,20 @@ import math
 import tkinter as tk
 from collections.abc import Callable, Iterable
 
-from pynput import mouse
+try:
+    from pynput import keyboard, mouse
 
-from config import OVERLAY_DURATION_MS
+    HAS_PYNPUT = True
+except ImportError:
+    HAS_PYNPUT = False
+
+from config import IS_WINDOWS, OVERLAY_DURATION_MS, UI_FONT_FAMILY
 
 
 class AnnotationOverlay:
-    """Draw non-interactive-looking boxes, arrows, and labels over the desktop."""
+    """Draw boxes, arrows, and labels over the desktop with pulsing highlights."""
 
-    TRANSPARENT = "#ff00ff"
+    TRANSPARENT = "#ff00ff" if IS_WINDOWS else "#010101"
     COLOR = "#24d6ff"
 
     def __init__(self, parent: tk.Tk) -> None:
@@ -20,7 +25,13 @@ class AnnotationOverlay:
         self.window.withdraw()
         self.window.overrideredirect(True)
         self.window.attributes("-topmost", True)
-        self.window.attributes("-transparentcolor", self.TRANSPARENT)
+        if IS_WINDOWS:
+            self.window.attributes("-transparentcolor", self.TRANSPARENT)
+        else:
+            try:
+                self.window.attributes("-alpha", 0.85)
+            except tk.TclError:
+                pass
         self.window.configure(bg=self.TRANSPARENT)
         self.width = parent.winfo_screenwidth()
         self.height = parent.winfo_screenheight()
@@ -33,10 +44,21 @@ class AnnotationOverlay:
         self._hide_after: str | None = None
         self._scanning_after: str | None = None
         self._scan_y: float = 0.0
+        self._pulse_after: str | None = None
+        self._pulse_step = 0
+        self._target_box_item: int | None = None
         self._on_target_click: Callable[[dict], None] | None = None
         self._target: tuple[float, float, float, float, dict] | None = None
-        self._mouse_listener = mouse.Listener(on_click=self._on_click)
-        self._mouse_listener.start()
+
+        self._mouse_listener = None
+        self._key_listener = None
+        if HAS_PYNPUT:
+            self._mouse_listener = mouse.Listener(on_click=self._on_click)
+            self._mouse_listener.start()
+
+            self._key_listener = keyboard.Listener(on_press=self._on_key_press)
+            self._key_listener.start()
+
         self._enable_click_through()
 
     def start_scanning(self) -> None:
@@ -46,7 +68,7 @@ class AnnotationOverlay:
         self.height = self.window.winfo_screenheight()
         self.window.geometry(f"{self.width}x{self.height}+0+0")
         self.canvas.configure(width=self.width, height=self.height)
-        
+
         # Show transparent window
         self.window.deiconify()
         self.window.lift()
@@ -67,7 +89,7 @@ class AnnotationOverlay:
     def _animate_scan(self) -> None:
         """Perform one frame of the sweeping laser line animation."""
         self.canvas.delete("all")
-        
+
         # 1. Draw animated horizontal laser bar
         y = int(self._scan_y)
         self.canvas.create_line(0, y, self.width, y, fill=self.COLOR, width=4)
@@ -93,7 +115,7 @@ class AnnotationOverlay:
         )
         self.canvas.create_text(
             cx, cy, text="✦ GuideAI: Analyzing Desktop...",
-            fill="white", font=("Segoe UI", 12, "bold")
+            fill="white", font=(UI_FONT_FAMILY, 12, "bold")
         )
 
         # Increment scan y coordinate
@@ -112,7 +134,9 @@ class AnnotationOverlay:
         self.window.geometry(f"{self.width}x{self.height}+0+0")
         self.canvas.configure(width=self.width, height=self.height)
         self.canvas.delete("all")
+        self._cancel_pulse()
         self._target = None
+        self._target_box_item = None
         self._on_target_click = on_target_click
         items = list(annotations)
         print(f"GuideAI overlay: rendering {len(items)} annotations")
@@ -132,13 +156,74 @@ class AnnotationOverlay:
         if self._hide_after:
             self.window.after_cancel(self._hide_after)
         self._hide_after = self.window.after(OVERLAY_DURATION_MS, self.hide)
+        self._animate_pulse()
+
+    def show_error(self, message: str) -> None:
+        """Render a visually distinct error banner in the center of the screen."""
+        self.width = self.window.winfo_screenwidth()
+        self.height = self.window.winfo_screenheight()
+        self.window.geometry(f"{self.width}x{self.height}+0+0")
+        self.canvas.configure(width=self.width, height=self.height)
+        self.canvas.delete("all")
+        self._target = None
+
+        cx, cy = self.width // 2, self.height // 2
+        w, h = 480, 110
+        left = cx - w // 2
+        top = cy - h // 2
+        right = left + w
+        mid = top + 28
+        bottom = top + h
+
+        # Red themed error card
+        self.canvas.create_rectangle(left, top, right, bottom, fill="#1c0d0d", outline="#ff4a4a", width=2)
+        self.canvas.create_rectangle(left + 2, top + 2, right - 2, mid, fill="#b51a1a", outline="")
+        self.canvas.create_text(
+            left + 12, top + 14, text="⚠️ GuideAI Error", anchor=tk.W, fill="white", font=("Segoe UI", 10, "bold")
+        )
+        self.canvas.create_line(left + 2, mid, right - 2, mid, fill="#ff4a4a", width=1)
+        self.canvas.create_text(
+            left + 12, mid + 8, text=message, anchor=tk.NW, fill="#ffd2d2",
+            font=("Segoe UI", 11, "bold"), justify=tk.LEFT, width=w - 24
+        )
+        self.canvas.create_text(
+            right - 12, bottom - 8, text="will auto-dismiss in 6s", anchor=tk.SE, fill="#d68484", font=("Segoe UI", 8)
+        )
+
+        self.window.deiconify()
+        self.window.lift()
+        self._enable_click_through()
+
+        if self._hide_after:
+            self.window.after_cancel(self._hide_after)
+        self._hide_after = self.window.after(6000, self.hide)
 
     def hide(self) -> None:
+        self._cancel_pulse()
         self.window.withdraw()
         self._hide_after = None
 
     def stop(self) -> None:
-        self._mouse_listener.stop()
+        self._cancel_pulse()
+        if self._mouse_listener:
+            self._mouse_listener.stop()
+        if self._key_listener:
+            self._key_listener.stop()
+
+    def _cancel_pulse(self) -> None:
+        if self._pulse_after:
+            self.window.after_cancel(self._pulse_after)
+            self._pulse_after = None
+
+    def _animate_pulse(self) -> None:
+        """Animate the target bounding box border with a pulsing width effect."""
+        if not self._target_box_item or not self.window.winfo_viewable():
+            return
+        widths = (3, 4, 5, 6, 5, 4)
+        width = widths[self._pulse_step % len(widths)]
+        self.canvas.itemconfig(self._target_box_item, width=width)
+        self._pulse_step += 1
+        self._pulse_after = self.window.after(90, self._animate_pulse)
 
     def _point(self, x: object, y: object) -> tuple[float, float]:
         return self._number(x) * self.width / 1000, self._number(y) * self.height / 1000
@@ -160,10 +245,11 @@ class AnnotationOverlay:
         height = min(height, self.height - y)
         if width < 4 or height < 4:
             return
-        self.canvas.create_rectangle(x, y, x + width, y + height, outline=self.COLOR, width=4)
+        box_item = self.canvas.create_rectangle(x, y, x + width, y + height, outline=self.COLOR, width=4)
         self._label(x, y, str(item.get("label", "")))
         if self._target is None:
             self._target = (x, y, x + width, y + height, dict(item))
+            self._target_box_item = box_item
 
     def _draw_arrow(self, item: dict) -> None:
         x1, y1 = self._point(item.get("x"), item.get("y"))
@@ -222,7 +308,7 @@ class AnnotationOverlay:
             left + self._PAD, top + self._HEADER_H // 2,
             text="✦ GuideAI",
             anchor=tk.W, fill="#ffffff",
-            font=("Segoe UI", 10, "bold"),
+            font=(UI_FONT_FAMILY, 10, "bold"),
         )
 
         # ── separator line ───────────────────────────────────────────────
@@ -236,7 +322,7 @@ class AnnotationOverlay:
             left + self._PAD, mid + 8,
             text=text,
             anchor=tk.NW, fill="#e8f4f8",
-            font=("Segoe UI", 11, "bold"),
+            font=(UI_FONT_FAMILY, 11, "bold"),
             justify=tk.LEFT,
             width=w - self._PAD * 2,
         )
@@ -246,7 +332,7 @@ class AnnotationOverlay:
             right - self._PAD, bottom - 8,
             text="click the highlighted target to continue →",
             anchor=tk.SE, fill="#5ba3b8",
-            font=("Segoe UI", 8),
+            font=(UI_FONT_FAMILY, 8),
         )
 
     def _label(self, x: float, y: float, label: str) -> None:
@@ -267,12 +353,19 @@ class AnnotationOverlay:
         )
         self.canvas.create_text(
             lx, ly, text=label, anchor=tk.SW, fill="#e8f4f8",
-            font=("Segoe UI", 11, "bold"),
+            font=(UI_FONT_FAMILY, 11, "bold"),
             justify=tk.LEFT, width=350,
         )
 
-    def _on_click(self, x: int, y: int, button: mouse.Button, pressed: bool) -> None:
-        if not pressed or button != mouse.Button.left or self._target is None:
+    def _on_key_press(self, key: "keyboard.Key | keyboard.KeyCode | None") -> None:
+        """Dismiss the overlay instantly when the user presses Escape."""
+        if key == keyboard.Key.esc:
+            self.window.after(0, self.hide)
+
+    def _on_click(self, x: int, y: int, button: "mouse.Button", pressed: bool) -> None:
+        if not pressed or button != mouse.Button.left:
+            return
+        if self._target is None:
             return
         left, top, right, bottom, target = self._target
         if left <= x <= right and top <= y <= bottom:
@@ -280,9 +373,14 @@ class AnnotationOverlay:
             self.hide()
             if self._on_target_click:
                 self._on_target_click(target)
+        else:
+            # Clicked outside the target area — dismiss the overlay immediately
+            self.window.after(0, self.hide)
 
     def _enable_click_through(self) -> None:
         """Keep the overlay from blocking the actual desktop interface."""
+        if not IS_WINDOWS:
+            return
         try:
             import ctypes
 

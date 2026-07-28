@@ -6,3 +6,4 @@ pyautogui
 pygetwindow
 python-dotenv
 mss
+PyQt5
