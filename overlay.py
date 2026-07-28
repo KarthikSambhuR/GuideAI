@@ -195,6 +195,17 @@ class AnnotationOverlay:
         except (TypeError, ValueError):
             return 0.0
 
+    def draw_target_box(self, x: float, y: float, width: float, height: float, label: str = "") -> None:
+        """Helper to draw a box overlay at normalized target coordinates (0-1000)."""
+        self._draw_box({
+            "type": "box",
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "label": label,
+        })
+
     def _draw_box(self, item: dict) -> None:
         x, y = self._point(item.get("x"), item.get("y"))
         width = self._number(item.get("width")) * self.width / 1000
