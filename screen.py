@@ -13,10 +13,29 @@ except ImportError:
 import pyautogui
 
 from config import (
+    IS_WINDOWS,
     SCREENSHOT_JPEG_QUALITY,
     SCREENSHOT_MAX_HEIGHT,
     SCREENSHOT_MAX_WIDTH,
 )
+
+
+def enable_dpi_awareness() -> bool:
+    """Enable high-DPI awareness on Windows to prevent multi-monitor coordinate mismatch."""
+    if not IS_WINDOWS:
+        return False
+    try:
+        import ctypes
+        # SetProcessDpiAwareness(2) -> PROCESS_PER_MONITOR_DPI_AWARE
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return True
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+            return True
+        except Exception:
+            return False
+
 
 
 def _get_active_window_rect() -> tuple[int, int, int, int] | None:
