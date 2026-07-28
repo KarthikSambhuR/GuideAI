@@ -92,6 +92,14 @@ class QuestionProcessor:
                 print(f"GuideAI: {response['answer']}\n")
                 response["status"] = "done"
                 self.on_response(response)
+
+                # Export tutorial summary if steps were recorded
+                try:
+                    from src.utils.exporter import GuideExporter
+                    exporter = GuideExporter()
+                    exporter.export_session(question, self._history, response.get("answer", ""))
+                except Exception as err:
+                    print(f"GuideAI exporter note: {err}")
             except Exception as error:
                 print(f"GuideAI request error: {error}")
                 self.on_response({"status": "error", "error": str(error)})
