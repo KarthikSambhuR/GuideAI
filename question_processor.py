@@ -52,19 +52,22 @@ class QuestionProcessor:
     def __init__(self, on_response: Callable[[dict], None]) -> None:
         self.on_response = on_response
         self.questions: queue.Queue[tuple[str, dict | None] | None] = queue.Queue()
+        self._history: list[dict] = []
         self.worker = threading.Thread(target=self._run, daemon=True, name="vision-request-worker")
 
     def start(self) -> None:
         self.worker.start()
 
     def submit(self, question: str) -> None:
+        self._history = []
         self.questions.put((question, None))
         print("GuideAI: question queued.")
 
     def continue_tutorial(self, question: str, completed_target: dict) -> None:
         """Capture the updated screen and ask the model for the next click."""
+        self._history.append(completed_target)
         self.questions.put((question, completed_target))
-        print("GuideAI: click detected; finding the next step...")
+        print(f"GuideAI: click detected (completed: {completed_target.get('label', 'unlabeled')}); finding the next step...")
 
     def stop(self) -> None:
         self.questions.put(None)
@@ -135,10 +138,17 @@ class QuestionProcessor:
     def _ask_model(self, question: str, completed_target: dict | None = None) -> dict:
         screenshot = capture_screenshot()
         continuation = ""
-        if completed_target:
+        if self._history:
+            steps_summary = []
+            for idx, target in enumerate(self._history):
+                label = target.get("label") or f"target at ({target.get('x')}, {target.get('y')})"
+                steps_summary.append(f"Step {idx + 1}: Clicked '{label}'")
+            steps_text = "\n".join(steps_summary)
             continuation = (
-                "\n\nThe user clicked the previous highlighted target. Use the new "
-                "screenshot and show only the next click. Do not repeat the completed step."
+                f"\n\nHere is the history of steps the user has already completed in this tutorial:\n"
+                f"{steps_text}\n\n"
+                f"Use the new screenshot to determine the NEXT click. Do not repeat or re-highlight "
+                f"any of the completed steps above."
             )
         body = {
             "model": LLAMA_MODEL,
