@@ -22,7 +22,13 @@ LLAMA_SERVER_PATH = Path(os.getenv("LLAMA_SERVER_PATH", r"C:\Users\eren\GuideAI\
 LLAMA_START_TIMEOUT_SECONDS = int(os.getenv("LLAMA_START_TIMEOUT_SECONDS", "180"))
 LLAMA_REQUEST_TIMEOUT_SECONDS = int(os.getenv("LLAMA_REQUEST_TIMEOUT_SECONDS", "180"))
 
+# Ollama runtime configurations (used by ollama_manager.py)
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma-4-e2b-local")
+OLLAMA_START_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_START_TIMEOUT_SECONDS", "60"))
+OLLAMA_TAGS_URL = os.getenv("OLLAMA_TAGS_URL", "http://127.0.0.1:11434/api/tags")
+
 OVERLAY_DURATION_MS = 8_000
+UI_FONT_FAMILY = "Segoe UI" if IS_WINDOWS else "DejaVu Sans"
 
 # Screenshot compression settings.
 # Reduce these to speed up LLM requests at the cost of visual detail.
@@ -30,5 +36,3 @@ OVERLAY_DURATION_MS = 8_000
 SCREENSHOT_MAX_WIDTH = 1280
 SCREENSHOT_MAX_HEIGHT = 720
 SCREENSHOT_JPEG_QUALITY = 50
-
-UI_FONT_FAMILY = "Segoe UI" if IS_WINDOWS else "DejaVu Sans"

@@ -1,6 +1,7 @@
 """Start and validate the local Ollama runtime used by GuideAI."""
 
 import json
+from pathlib import Path
 import shutil
 import subprocess
 import tempfile
