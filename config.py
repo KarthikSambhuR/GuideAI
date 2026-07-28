@@ -46,3 +46,19 @@ UI_FONT_FAMILY = "Segoe UI" if IS_WINDOWS else "DejaVu Sans"
 SCREENSHOT_MAX_WIDTH = 1280
 SCREENSHOT_MAX_HEIGHT = 720
 SCREENSHOT_JPEG_QUALITY = 50
+
+
+class ConfigManager:
+    """Central configuration manager providing validated runtime settings."""
+
+    def __init__(self) -> None:
+        self.sample_rate = SAMPLE_RATE
+        self.max_recording_seconds = MAX_RECORDING_SECONDS
+        self.llama_url = LLAMA_SERVER_URL
+        self.model_name = LLAMA_MODEL
+
+    def get(self, key: str, default: object = None) -> object:
+        return getattr(self, key, default)
+
+
+config_manager = ConfigManager()
