@@ -14,8 +14,12 @@ from question_processor import QuestionProcessor
 from logger import logger
 
 
+from src.audio.tts import TTSManager
+
+
 def main() -> None:
     llama = LlamaManager()
+    tts = TTSManager()
     try:
         llama.ensure_ready()
     except RuntimeError as error:
@@ -57,6 +61,9 @@ def main() -> None:
                     overlay.show_error(error_msg)
                 else:
                     overlay.stop_scanning()
+                    answer = response.get("answer")
+                    if answer:
+                        tts.speak(answer)
                     overlay.show(
                         response["annotations"],
                         on_target_click=lambda target, question=response["question"]:
@@ -72,6 +79,7 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        tts.stop()
         voice.stop()
         questions.stop()
         overlay.stop()
