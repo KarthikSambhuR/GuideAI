@@ -37,6 +37,9 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma-4-e2b-local")
 OLLAMA_START_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_START_TIMEOUT_SECONDS", "60"))
 OLLAMA_TAGS_URL = os.getenv("OLLAMA_TAGS_URL", "http://127.0.0.1:11434/api/tags")
 
+# Visual focus spotlight configuration
+ENABLE_SPOTLIGHT = os.getenv("ENABLE_SPOTLIGHT", "true").lower() in ("true", "1", "yes")
+
 OVERLAY_DURATION_MS = 8_000
 UI_FONT_FAMILY = "Segoe UI" if IS_WINDOWS else "DejaVu Sans"
 
