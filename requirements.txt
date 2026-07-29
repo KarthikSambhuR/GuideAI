@@ -5,3 +5,6 @@ pynput
 pyautogui
 python-dotenv
 mss
+pygetwindow
+PyQt5
+pystray

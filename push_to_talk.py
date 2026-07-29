@@ -11,10 +11,27 @@ from pywhispercpp.model import Model
 
 from config import MAX_RECORDING_SECONDS, SAMPLE_RATE
 from screen import capture_screenshot
+from whisper_utils import transcribe_buffer
+
+# Windows virtual-key code for F8.
+_VK_F8 = 0x77
+
+
+class KeyboardShortcutListener:
+    """Basic keyboard shortcut listener helper wrapping pynput keyboard.Listener."""
+
+    def __init__(self, on_press: Callable, on_release: Callable) -> None:
+        self.listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+
+    def start(self) -> None:
+        self.listener.start()
+
+    def stop(self) -> None:
+        self.listener.stop()
 
 
 class PushToTalk:
-    """Record while F8 is held and immediately free F8 after transcription."""
+    """Record while F8 is held; F8 is suppressed on Windows so other apps never see it."""
 
     def __init__(self, model: Model, on_transcript: Callable[[str, str | None], None]) -> None:
         self.model = model
@@ -22,7 +39,17 @@ class PushToTalk:
         self.ui_events: queue.Queue[tuple[str, float | None]] = queue.Queue()
         self.recording = threading.Event()
         self.stop_recording = threading.Event()
-        self.listener = keyboard.Listener(on_press=self._on_press, on_release=self._on_release)
+        self.listener = keyboard.Listener(
+            on_press=self._on_press,
+            on_release=self._on_release,
+            win32_event_filter=self._win32_event_filter,
+        )
+
+    def _win32_event_filter(self, msg: int, data: object) -> bool:
+        """Block F8 from reaching any other application on Windows."""
+        if getattr(data, "vkCode", None) == _VK_F8:
+            self.listener.suppress_event()
+        return True
 
     def start(self) -> None:
         self.listener.start()
@@ -43,21 +70,30 @@ class PushToTalk:
             self.stop_recording.set()
 
     def _record(self) -> None:
-        chunks: list[np.ndarray] = []
         self.ui_events.put(("show", None))
+        audio_queue: queue.Queue[np.ndarray] = queue.Queue()
 
         def capture(indata: np.ndarray, frames: int, time: object, status: sd.CallbackFlags) -> None:
             if status:
-                print(f"Audio status: {status}")
-            chunk = indata.copy()
-            chunks.append(chunk)
-            rms = float(np.sqrt(np.mean(np.square(chunk))))
-            self.ui_events.put(("level", min(rms * 8, 1.0)))
+                print(f"Audio callback status: {status}")
+            audio_queue.put(indata.copy())
 
+        chunks: list[np.ndarray] = []
+        stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=capture)
         pre_captured_screenshot: str | None = None
+
         try:
-            with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32", callback=capture):
-                self.stop_recording.wait(MAX_RECORDING_SECONDS)
+            with stream:
+                total_duration = 0.0
+                while not self.stop_recording.is_set() and total_duration < MAX_RECORDING_SECONDS:
+                    try:
+                        chunk = audio_queue.get(timeout=0.05)
+                        chunks.append(chunk)
+                        rms = float(np.sqrt(np.mean(np.square(chunk))))
+                        self.ui_events.put(("level", min(rms * 8, 1.0)))
+                        total_duration += len(chunk) / SAMPLE_RATE
+                    except queue.Empty:
+                        continue
 
             # Instantly pre-capture screenshot at the exact moment recording stops
             try:
@@ -72,12 +108,7 @@ class PushToTalk:
                 return
 
             audio = np.concatenate(chunks, axis=0).squeeze()
-            audio = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
-            peak = np.max(np.abs(audio))
-            if peak:
-                audio /= peak
-
-            transcript = " ".join(segment.text for segment in self.model.transcribe(audio)).strip()
+            transcript = transcribe_buffer(audio, self.model)
             if transcript:
                 print(f"GuideAI heard: {transcript}")
                 self.on_transcript(transcript, pre_captured_screenshot)
@@ -88,3 +119,12 @@ class PushToTalk:
             self.ui_events.put(("hide", None))
         finally:
             self.recording.clear()
+
+    @staticmethod
+    def get_raw_audio_bytes(chunks: list[np.ndarray]) -> bytes:
+        """Convert float32 audio chunks into raw 16-bit PCM bytes."""
+        if not chunks:
+            return b""
+        audio = np.concatenate(chunks, axis=0).squeeze()
+        audio = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
+        return (audio * 32767.0).astype(np.int16).tobytes()

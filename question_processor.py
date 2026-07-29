@@ -2,6 +2,7 @@
 
 import json
 import queue
+import re
 import threading
 from collections.abc import Callable
 from urllib.request import Request, urlopen
@@ -45,25 +46,36 @@ arrow pointing to it. Use a short label such as \"1. Click Settings\". Never inv
 location that is not visibly supported by the screenshot."""
 
 
+def get_system_prompt(custom_context: str = "") -> str:
+    """Formulate the complete system prompt for guide instructions."""
+    if custom_context:
+        return f"{PROMPT}\n\nAdditional Context: {custom_context}"
+    return PROMPT
+
+
+
 class QuestionProcessor:
     """Queue questions so model work never blocks microphone input."""
 
     def __init__(self, on_response: Callable[[dict], None]) -> None:
         self.on_response = on_response
         self.questions: queue.Queue[tuple[str, dict | None, str | None] | None] = queue.Queue()
+        self._history: list[dict] = []
         self.worker = threading.Thread(target=self._run, daemon=True, name="vision-request-worker")
 
     def start(self) -> None:
         self.worker.start()
 
     def submit(self, question: str, pre_captured_screenshot: str | None = None) -> None:
+        self._history = []
         self.questions.put((question, None, pre_captured_screenshot))
         print("GuideAI: question queued.")
 
     def continue_tutorial(self, question: str, completed_target: dict) -> None:
         """Capture the updated screen and ask the model for the next click."""
+        self._history.append(completed_target)
         self.questions.put((question, completed_target, None))
-        print("GuideAI: click detected; finding the next step...")
+        print(f"GuideAI: click detected (completed: {completed_target.get('label', 'unlabeled')}); finding the next step...")
 
     def stop(self) -> None:
         self.questions.put(None)
@@ -75,13 +87,52 @@ class QuestionProcessor:
                 return
             question, completed_target, pre_captured_screenshot = task
             try:
+                self.on_response({"status": "scanning"})
                 response = self._ask_model(question, completed_target, pre_captured_screenshot)
                 print(f"GuideAI: {response['answer']}\n")
+                response["status"] = "done"
                 self.on_response(response)
+
+                try:
+                    from src.utils.exporter import GuideExporter
+                    exporter = GuideExporter()
+                    exporter.export_session(question, self._history, response.get("answer", ""))
+                except Exception as err:
+                    print(f"GuideAI exporter note: {err}")
             except Exception as error:
                 print(f"GuideAI request error: {error}")
+                self.on_response({"status": "error", "error": str(error)})
             finally:
                 self.questions.task_done()
+
+    def _parse_llm_json(self, raw: str) -> dict:
+        """Robustly parse a JSON object from the model's raw text output."""
+        text = raw.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        fence_re = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
+        match = fence_re.search(text)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        brace_re = re.compile(r"(\{.*\})", re.DOTALL)
+        match = brace_re.search(text)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        raise ValueError(
+            f"Could not parse JSON from model output. "
+            f"First 200 chars: {text[:200]!r}"
+        )
 
     def _ask_model(
         self,
@@ -90,12 +141,18 @@ class QuestionProcessor:
         pre_captured_screenshot: str | None = None,
     ) -> dict:
         screenshot = pre_captured_screenshot or capture_screenshot()
-
         continuation = ""
-        if completed_target:
+        if self._history:
+            steps_summary = []
+            for idx, target in enumerate(self._history):
+                label = target.get("label") or f"target at ({target.get('x')}, {target.get('y')})"
+                steps_summary.append(f"Step {idx + 1}: Clicked '{label}'")
+            steps_text = "\n".join(steps_summary)
             continuation = (
-                "\n\nThe user clicked the previous highlighted target. Use the new "
-                "screenshot and show only the next click. Do not repeat the completed step."
+                f"\n\nHere is the history of steps the user has already completed in this tutorial:\n"
+                f"{steps_text}\n\n"
+                f"Use the new screenshot to determine the NEXT click. Do not repeat or re-highlight "
+                f"any of the completed steps above."
             )
         body = {
             "model": LLAMA_MODEL,
@@ -121,7 +178,8 @@ class QuestionProcessor:
         )
         with urlopen(request, timeout=LLAMA_REQUEST_TIMEOUT_SECONDS) as response:
             payload = json.load(response)
-        result = json.loads(payload["choices"][0]["message"]["content"])
+        raw_content = payload["choices"][0]["message"]["content"]
+        result = self._parse_llm_json(raw_content)
         if not isinstance(result.get("answer"), str) or not isinstance(result.get("annotations"), list):
             raise ValueError("Gemma returned an invalid guidance response.")
         result["annotations"] = [
@@ -129,8 +187,6 @@ class QuestionProcessor:
             if isinstance(item, dict) and item.get("type") in {"box", "arrow", "text"}
         ]
         print(f"GuideAI: model returned {len(result['annotations'])} visual annotations.")
-        # Always display the model's spoken guidance as a visible tutorial caption,
-        # even if the model omits an optional text annotation of its own.
         result["annotations"].append({
             "type": "text",
             "x": 24,
@@ -138,4 +194,11 @@ class QuestionProcessor:
             "text": result["answer"],
         })
         result["question"] = question
+
+        try:
+            from screen import save_debug_image
+            save_debug_image(screenshot, result["annotations"])
+        except Exception as err:
+            print(f"GuideAI debug: failed to save step image: {err}")
+
         return result
