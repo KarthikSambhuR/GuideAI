@@ -31,7 +31,7 @@ class KeyboardShortcutListener:
 
 
 class PushToTalk:
-    """Record while F8 is held; F8 is suppressed so other apps never see it."""
+    """Record while F8 is held; F8 is suppressed on Windows so other apps never see it."""
 
     def __init__(self, model: Model, on_transcript: Callable[[str, str | None], None]) -> None:
         self.model = model
@@ -45,25 +45,11 @@ class PushToTalk:
             win32_event_filter=self._win32_event_filter,
         )
 
-    # ------------------------------------------------------------------
-    # Hotkey suppression
-    # ------------------------------------------------------------------
-
     def _win32_event_filter(self, msg: int, data: object) -> bool:
-        """Block F8 from reaching any other application on Windows.
-
-        pynput calls this hook before the event is forwarded to the OS
-        event queue.  Calling ``suppress_event()`` drops F8 entirely so
-        that no other window (browser, editor, …) ever receives it.
-        All other keys are passed through unchanged.
-        """
+        """Block F8 from reaching any other application on Windows."""
         if getattr(data, "vkCode", None) == _VK_F8:
             self.listener.suppress_event()
         return True
-
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
 
     def start(self) -> None:
         self.listener.start()
@@ -72,10 +58,6 @@ class PushToTalk:
     def stop(self) -> None:
         self.stop_recording.set()
         self.listener.stop()
-
-    # ------------------------------------------------------------------
-    # Key handlers
-    # ------------------------------------------------------------------
 
     def _on_press(self, key: keyboard.Key | keyboard.KeyCode | None) -> None:
         if key == keyboard.Key.f8 and not self.recording.is_set():
@@ -87,10 +69,6 @@ class PushToTalk:
         if key == keyboard.Key.f8:
             self.stop_recording.set()
 
-    # ------------------------------------------------------------------
-    # Audio recording & transcription (Buffered Queue Producer-Consumer)
-    # ------------------------------------------------------------------
-
     def _record(self) -> None:
         self.ui_events.put(("show", None))
         audio_queue: queue.Queue[np.ndarray] = queue.Queue()
@@ -98,7 +76,6 @@ class PushToTalk:
         def capture(indata: np.ndarray, frames: int, time: object, status: sd.CallbackFlags) -> None:
             if status:
                 print(f"Audio callback status: {status}")
-            # Thread-safe queue push (fast, non-blocking for real-time audio thread safety)
             audio_queue.put(indata.copy())
 
         chunks: list[np.ndarray] = []
@@ -107,20 +84,13 @@ class PushToTalk:
 
         try:
             with stream:
-                # We expect sounddevice callbacks approximately every 50-100ms.
-                # Stop recording when stop_recording is set or when we hit MAX_RECORDING_SECONDS.
                 total_duration = 0.0
                 while not self.stop_recording.is_set() and total_duration < MAX_RECORDING_SECONDS:
                     try:
-                        # Pull chunks from the buffer queue with a short timeout
                         chunk = audio_queue.get(timeout=0.05)
                         chunks.append(chunk)
-
-                        # Perform heavy RMS calculation and duration updates on the worker thread
                         rms = float(np.sqrt(np.mean(np.square(chunk))))
                         self.ui_events.put(("level", min(rms * 8, 1.0)))
-
-                        # Add duration of the chunk to the accumulator
                         total_duration += len(chunk) / SAMPLE_RATE
                     except queue.Empty:
                         continue
@@ -158,4 +128,3 @@ class PushToTalk:
         audio = np.concatenate(chunks, axis=0).squeeze()
         audio = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
         return (audio * 32767.0).astype(np.int16).tobytes()
-

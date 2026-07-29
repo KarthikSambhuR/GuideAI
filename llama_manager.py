@@ -60,8 +60,6 @@ class LlamaManager:
     def _is_running() -> bool:
         """Return true only after llama.cpp has finished loading the model."""
         try:
-            # /health can return 200 while the model is still loading. The models
-            # endpoint returns 503 until it is safe to send a screenshot request.
             with urlopen(LLAMA_SERVER_MODELS_URL, timeout=1) as response:
                 return response.status == 200
         except URLError:
@@ -86,12 +84,10 @@ class LlamaManager:
         ]
 
         if LLAMA_HF_REPO:
-            # Repo mode: llama-server downloads the model from HuggingFace
             cmd.extend(["--hf-repo", LLAMA_HF_REPO])
         else:
             cmd.extend(["--model", str(GGUF_MODEL_PATH), "--mmproj", str(MMPROJ_MODEL_PATH)])
 
-        # Only add -ngl when GPU offloading is requested
         if LLAMA_GPU_LAYERS > 0:
             cmd.extend(["-ngl", str(LLAMA_GPU_LAYERS)])
 
