@@ -103,6 +103,7 @@ class ListeningPill:
         self.root.lift()
         self._animate_thinking()
 
+
     def _animate_thinking(self) -> None:
         if self.mode != "thinking":
             return

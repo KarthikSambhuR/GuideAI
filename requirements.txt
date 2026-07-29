@@ -3,8 +3,8 @@ sounddevice
 pywhispercpp
 pynput
 pyautogui
-pygetwindow
 python-dotenv
 mss
+pygetwindow
 PyQt5
 pystray

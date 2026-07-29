@@ -38,6 +38,8 @@ def main() -> None:
                 action, value = voice.ui_events.get_nowait()
                 if action == "show":
                     pill.show()
+                elif action == "thinking":
+                    pill.show_thinking()
                 elif action == "hide":
                     pill.hide()
                 elif action == "level" and value is not None:
@@ -51,20 +53,24 @@ def main() -> None:
                 if status == "scanning":
                     overlay.start_scanning()
                 elif status == "error":
+                    pill.hide()
                     overlay.stop_scanning()
                     error_msg = response.get("error", "Unknown error")
                     print(f"GuideAI processing error: {error_msg}")
                     overlay.show_error(error_msg)
                 else:
+                    pill.hide()
                     overlay.stop_scanning()
                     overlay.show(
                         response["annotations"],
                         on_target_click=lambda target, question=response["question"]:
                             questions.continue_tutorial(question, target),
                     )
+
         except queue.Empty:
             pass
         pill.root.after(33, process_ui_events)
+
 
     process_ui_events()
     try:

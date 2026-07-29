@@ -69,7 +69,6 @@ class AnnotationOverlay:
         self.window.geometry(f"{self.width}x{self.height}+0+0")
         self.canvas.configure(width=self.width, height=self.height)
 
-        # Show transparent window
         self.window.deiconify()
         self.window.lift()
         self._enable_click_through()
@@ -82,7 +81,6 @@ class AnnotationOverlay:
         if self._scanning_after:
             self.window.after_cancel(self._scanning_after)
             self._scanning_after = None
-        # Only withdraw window if it was not drawn for other annotations
         if not self._hide_after:
             self.window.withdraw()
 
@@ -90,23 +88,19 @@ class AnnotationOverlay:
         """Perform one frame of the sweeping laser line animation."""
         self.canvas.delete("all")
 
-        # 1. Draw animated horizontal laser bar
         y = int(self._scan_y)
         self.canvas.create_line(0, y, self.width, y, fill=self.COLOR, width=4)
-        # Add a soft trailing aura
         self.canvas.create_rectangle(
             0, max(0, y - 24), self.width, y,
             fill=self.COLOR, outline="", stipple="gray25" if tk.TkVersion >= 8.5 else ""
         )
 
-        # 2. Draw high-tech HUD grid overlay (dotted or sparse line segments)
         grid_size = 80
         for gx in range(0, self.width, grid_size):
             self.canvas.create_line(gx, 0, gx, self.height, fill="#123d47", width=1)
         for gy in range(0, self.height, grid_size):
             self.canvas.create_line(0, gy, self.width, gy, fill="#123d47", width=1)
 
-        # 3. Floating center status badge
         cx, cy = self.width // 2, self.height // 2
         bw, bh = 340, 56
         self.canvas.create_rectangle(
@@ -118,12 +112,10 @@ class AnnotationOverlay:
             fill="white", font=(UI_FONT_FAMILY, 12, "bold")
         )
 
-        # Increment scan y coordinate
-        self._scan_y += self.height / 70.0  # complete sweep in ~70 frames (2s)
+        self._scan_y += self.height / 70.0
         if self._scan_y > self.height:
             self._scan_y = 0.0
 
-        # Loop next frame in 30ms
         self._scanning_after = self.window.after(30, self._animate_scan)
 
     def show(self, annotations: Iterable[dict], on_target_click: Callable[[dict], None] | None = None) -> None:
@@ -158,46 +150,6 @@ class AnnotationOverlay:
         self._hide_after = self.window.after(OVERLAY_DURATION_MS, self.hide)
         self._animate_pulse()
 
-    def show_error(self, message: str) -> None:
-        """Render a visually distinct error banner in the center of the screen."""
-        self.width = self.window.winfo_screenwidth()
-        self.height = self.window.winfo_screenheight()
-        self.window.geometry(f"{self.width}x{self.height}+0+0")
-        self.canvas.configure(width=self.width, height=self.height)
-        self.canvas.delete("all")
-        self._target = None
-
-        cx, cy = self.width // 2, self.height // 2
-        w, h = 480, 110
-        left = cx - w // 2
-        top = cy - h // 2
-        right = left + w
-        mid = top + 28
-        bottom = top + h
-
-        # Red themed error card
-        self.canvas.create_rectangle(left, top, right, bottom, fill="#1c0d0d", outline="#ff4a4a", width=2)
-        self.canvas.create_rectangle(left + 2, top + 2, right - 2, mid, fill="#b51a1a", outline="")
-        self.canvas.create_text(
-            left + 12, top + 14, text="⚠️ GuideAI Error", anchor=tk.W, fill="white", font=("Segoe UI", 10, "bold")
-        )
-        self.canvas.create_line(left + 2, mid, right - 2, mid, fill="#ff4a4a", width=1)
-        self.canvas.create_text(
-            left + 12, mid + 8, text=message, anchor=tk.NW, fill="#ffd2d2",
-            font=("Segoe UI", 11, "bold"), justify=tk.LEFT, width=w - 24
-        )
-        self.canvas.create_text(
-            right - 12, bottom - 8, text="will auto-dismiss in 6s", anchor=tk.SE, fill="#d68484", font=("Segoe UI", 8)
-        )
-
-        self.window.deiconify()
-        self.window.lift()
-        self._enable_click_through()
-
-        if self._hide_after:
-            self.window.after_cancel(self._hide_after)
-        self._hide_after = self.window.after(6000, self.hide)
-
     def hide(self) -> None:
         self._cancel_pulse()
         self.window.withdraw()
@@ -221,21 +173,20 @@ class AnnotationOverlay:
         mid = top + 28
         bottom = top + h
 
-        # Red themed error card
         self.canvas.create_rectangle(left, top, right, bottom, fill="#1c0d0d", outline="#ff4a4a", width=2)
         self.canvas.create_rectangle(left + 2, top + 2, right - 2, mid, fill="#b51a1a", outline="")
         self.canvas.create_text(
             left + 12, top + 14, text="⚠️ GuideAI Error", anchor=tk.W, fill="white",
-            font=("Segoe UI", 10, "bold")
+            font=(UI_FONT_FAMILY, 10, "bold")
         )
         self.canvas.create_line(left + 2, mid, right - 2, mid, fill="#ff4a4a", width=1)
         self.canvas.create_text(
             left + 12, mid + 8, text=message, anchor=tk.NW, fill="#ffd2d2",
-            font=("Segoe UI", 11, "bold"), justify=tk.LEFT, width=w - 24
+            font=(UI_FONT_FAMILY, 11, "bold"), justify=tk.LEFT, width=w - 24
         )
         self.canvas.create_text(
             right - 12, bottom - 8, text="will auto-dismiss in 6s", anchor=tk.SE,
-            fill="#d68484", font=("Segoe UI", 8)
+            fill="#d68484", font=(UI_FONT_FAMILY, 8)
         )
 
         self.window.deiconify()
@@ -292,13 +243,9 @@ class AnnotationOverlay:
     def _draw_spotlight_backdrop(self, x: float, y: float, w: float, h: float) -> None:
         """Render a subtle stippled dark backdrop around the target to highlight it."""
         try:
-            # Top strip
             self.canvas.create_rectangle(0, 0, self.width, max(0, y), fill="#000000", outline="", stipple="gray25")
-            # Bottom strip
             self.canvas.create_rectangle(0, min(self.height, y + h), self.width, self.height, fill="#000000", outline="", stipple="gray25")
-            # Left strip
             self.canvas.create_rectangle(0, max(0, y), max(0, x), min(self.height, y + h), fill="#000000", outline="", stipple="gray25")
-            # Right strip
             self.canvas.create_rectangle(min(self.width, x + w), max(0, y), self.width, min(self.height, y + h), fill="#000000", outline="", stipple="gray25")
         except Exception:
             pass
@@ -332,7 +279,6 @@ class AnnotationOverlay:
         x, y = self._point(item.get("x"), item.get("y"))
         self._caption(x, y, str(item.get("text", "")))
 
-    # Banner geometry constants
     _BANNER_W = 480
     _HEADER_H = 28
     _BODY_H = 90
@@ -340,35 +286,22 @@ class AnnotationOverlay:
     _PAD = 12
 
     def _caption(self, x: float, y: float, text: str) -> None:
-        """Draw a branded instruction banner with a header strip and body text.
-
-        Layout
-        ------
-        ┌─────────────────────────────────────────┐  ← cyan header (28 px)
-        │  ✦ GuideAI                              │
-        ├─────────────────────────────────────────┤
-        │  <step text, word-wrapped>              │  ← dark body  (90 px)
-        │                   click target to cont →│
-        └─────────────────────────────────────────┘
-        """
+        """Draw a branded instruction banner with a header strip and body text."""
         if not text:
             return
 
         w, h = self._BANNER_W, self._BANNER_H
-        # Pin the banner so it never goes off-screen.
         left = int(min(max(self._PAD, x), self.width - w - self._PAD))
         top = int(min(max(self._PAD, y), self.height - h - self._PAD))
         right = left + w
         mid = top + self._HEADER_H
         bottom = top + h
 
-        # ── outer border ────────────────────────────────────────────────
         self.canvas.create_rectangle(
             left, top, right, bottom,
             fill="#0d1f2d", outline=self.COLOR, width=2,
         )
 
-        # ── cyan header strip ────────────────────────────────────────────
         self.canvas.create_rectangle(
             left + 2, top + 2, right - 2, mid,
             fill="#0a9dba", outline="",
@@ -380,13 +313,11 @@ class AnnotationOverlay:
             font=(UI_FONT_FAMILY, 10, "bold"),
         )
 
-        # ── separator line ───────────────────────────────────────────────
         self.canvas.create_line(
             left + 2, mid, right - 2, mid,
             fill=self.COLOR, width=1,
         )
 
-        # ── step text ────────────────────────────────────────────────────
         self.canvas.create_text(
             left + self._PAD, mid + 8,
             text=text,
@@ -396,7 +327,6 @@ class AnnotationOverlay:
             width=w - self._PAD * 2,
         )
 
-        # ── hint line ────────────────────────────────────────────────────
         self.canvas.create_text(
             right - self._PAD, bottom - 8,
             text="click the highlighted target to continue →",
@@ -410,7 +340,6 @@ class AnnotationOverlay:
             return
         lx = min(max(8, x + 8), max(8, self.width - 360))
         ly = min(max(20, y - 8), self.height - 8)
-        # Measure approximate text bbox and draw a backing rectangle first.
         char_w, char_h = 7, 15
         tw = min(len(label) * char_w, 350)
         th = char_h
@@ -426,12 +355,12 @@ class AnnotationOverlay:
             justify=tk.LEFT, width=350,
         )
 
-    def _on_key_press(self, key: "keyboard.Key | keyboard.KeyCode | None") -> None:
+    def _on_key_press(self, key: keyboard.Key | keyboard.KeyCode | None) -> None:
         """Dismiss the overlay instantly when the user presses Escape."""
         if key == keyboard.Key.esc:
             self.window.after(0, self.hide)
 
-    def _on_click(self, x: int, y: int, button: "mouse.Button", pressed: bool) -> None:
+    def _on_click(self, x: int, y: int, button: mouse.Button, pressed: bool) -> None:
         if not pressed or button != mouse.Button.left:
             return
         if self._target is None:
@@ -443,8 +372,8 @@ class AnnotationOverlay:
             if self._on_target_click:
                 self._on_target_click(target)
         else:
-            # Clicked outside the target area — dismiss the overlay immediately
             self.window.after(0, self.hide)
+
 
     def _enable_click_through(self) -> None:
         """Keep the overlay from blocking the actual desktop interface."""

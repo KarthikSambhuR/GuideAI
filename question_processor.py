@@ -93,7 +93,6 @@ class QuestionProcessor:
                 response["status"] = "done"
                 self.on_response(response)
 
-                # Export tutorial summary if steps were recorded
                 try:
                     from src.utils.exporter import GuideExporter
                     exporter = GuideExporter()
@@ -107,28 +106,13 @@ class QuestionProcessor:
                 self.questions.task_done()
 
     def _parse_llm_json(self, raw: str) -> dict:
-        """Robustly parse a JSON object from the model's raw text output.
-
-        The model may wrap its JSON in markdown code fences or include
-        trailing prose.  This method tries three strategies in order:
-
-        1. Plain ``json.loads`` on the full string (fast path, covers
-           well-behaved responses).
-        2. Strip markdown code fences (`` ```json … ``` `` or `` ``` … `` ``)
-           then parse again.
-        3. Use a regex to extract the first ``{ … }`` block and parse that.
-
-        Raises ``ValueError`` if all strategies fail.
-        """
+        """Robustly parse a JSON object from the model's raw text output."""
         text = raw.strip()
-
-        # Strategy 1 — plain parse.
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
 
-        # Strategy 2 — strip markdown fences.
         fence_re = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
         match = fence_re.search(text)
         if match:
@@ -137,7 +121,6 @@ class QuestionProcessor:
             except json.JSONDecodeError:
                 pass
 
-        # Strategy 3 — extract first {...} block.
         brace_re = re.compile(r"(\{.*\})", re.DOTALL)
         match = brace_re.search(text)
         if match:
@@ -204,8 +187,6 @@ class QuestionProcessor:
             if isinstance(item, dict) and item.get("type") in {"box", "arrow", "text"}
         ]
         print(f"GuideAI: model returned {len(result['annotations'])} visual annotations.")
-        # Always display the model's spoken guidance as a visible tutorial caption,
-        # even if the model omits an optional text annotation of its own.
         result["annotations"].append({
             "type": "text",
             "x": 24,
@@ -214,7 +195,6 @@ class QuestionProcessor:
         })
         result["question"] = question
 
-        # Save an annotated copy locally for developer verification (Issue #16)
         try:
             from screen import save_debug_image
             save_debug_image(screenshot, result["annotations"])
