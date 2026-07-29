@@ -65,11 +65,17 @@ class ListeningPill:
         )
         self.set_level(0.0)
 
+    @staticmethod
+    def get_amplitude_level(rms: float) -> float:
+        """Calculate normalized amplitude visualizer level from input RMS sound level."""
+        return min(max(rms * 8.0, 0.0), 1.0)
+
     def set_level(self, level: float) -> None:
         if self.mode != "recording":
             return
         target_level = min(max(level, 0.0), 1.0)
-        # Exponential Moving Average (EMA) smoothing for fluid bar movement
+        # Exponential Moving Average (EMA) smoothing: α=0.35 for fluid bar movement.
+        # Formula: level_t = α * new_level + (1 - α) * level_{t-1}
         self.current_level = 0.35 * target_level + 0.65 * self.current_level
         base_heights = (4, 7, 11, 15, 20, 15, 11, 7, 4)
         center_y = self.HEIGHT // 2
@@ -88,6 +94,7 @@ class ListeningPill:
         self.root.lift()
 
     def show_thinking(self) -> None:
+        """Switch the pill to an animated 'Thinking…' state."""
         self.mode = "thinking"
         for bar in self.bars:
             self.canvas.itemconfig(bar, state=tk.HIDDEN)
@@ -95,6 +102,7 @@ class ListeningPill:
         self.root.deiconify()
         self.root.lift()
         self._animate_thinking()
+
 
     def _animate_thinking(self) -> None:
         if self.mode != "thinking":

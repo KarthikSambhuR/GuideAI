@@ -11,12 +11,15 @@ from push_to_talk import PushToTalk
 from question_processor import QuestionProcessor
 
 
+from logger import logger
+
+
 def main() -> None:
     llama = LlamaManager()
     try:
         llama.ensure_ready()
     except RuntimeError as error:
-        print(f"GuideAI startup error: {error}")
+        logger.error(f"GuideAI startup error: {error}")
         return
 
     print("Loading the Whisper model...")
@@ -26,7 +29,7 @@ def main() -> None:
     ui_events: queue.Queue[dict] = queue.Queue()
     questions = QuestionProcessor(ui_events.put)
     questions.start()
-    voice = PushToTalk(whisper, questions.submit)
+    voice = PushToTalk(whisper, lambda transcript, screenshot: questions.submit(transcript, screenshot))
     voice.start()
 
     def process_ui_events() -> None:
@@ -46,12 +49,24 @@ def main() -> None:
         try:
             while True:
                 response = ui_events.get_nowait()
-                pill.hide()
-                overlay.show(
-                    response["annotations"],
-                    on_target_click=lambda target, question=response["question"]:
-                        questions.continue_tutorial(question, target),
-                )
+                status = response.get("status")
+                if status == "scanning":
+                    overlay.start_scanning()
+                elif status == "error":
+                    pill.hide()
+                    overlay.stop_scanning()
+                    error_msg = response.get("error", "Unknown error")
+                    print(f"GuideAI processing error: {error_msg}")
+                    overlay.show_error(error_msg)
+                else:
+                    pill.hide()
+                    overlay.stop_scanning()
+                    overlay.show(
+                        response["annotations"],
+                        on_target_click=lambda target, question=response["question"]:
+                            questions.continue_tutorial(question, target),
+                    )
+
         except queue.Empty:
             pass
         pill.root.after(33, process_ui_events)
